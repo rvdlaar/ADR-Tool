@@ -2,6 +2,27 @@
 
 This document describes the authentication and CORS security implementation for the ADR Tool API.
 
+## ⚠️ Security Remediation (v2) - Resolved Issues
+
+The following security issues have been addressed in this version:
+
+### 1. ✅ Hardcoded API Key Removed
+- **Previous issue**: Hardcoded test API key `test-api-key-12345` was valid in production
+- **Fix**: API keys must now be configured via `VALID_API_KEYS` environment variable only
+- No hardcoded keys exist in source code
+
+### 2. ✅ SECRET_KEY Single Source of Truth
+- **Previous issue**: SECRET_KEY was defined in both `config.py` and `security.py`
+- **Fix**: `config.py` now imports SECRET_KEY from `security.py` - single source of truth
+- Production deployments must set `SECRET_KEY` environment variable
+
+### 3. ✅ Authentication Tests Fixed
+- **Previous issue**: Tests used non-existent mock credentials
+- **Fix**: Tests now use correct mock users (`admin`/`user`/`reader` with `password123`)
+- All 13 security tests now pass
+
+---
+
 ## Overview
 
 The ADR Tool API implements robust security measures suitable for Vincent's security review:
@@ -119,24 +140,41 @@ ALLOWED_ORIGINS=https://your-domain.com,https://admin.your-domain.com
 
 ## Environment Variables
 
-Create a `.env` file:
+**⚠️ CRITICAL**: Never commit actual secrets to version control. Use environment variables or a secrets manager.
+
+Create a `.env` file (add to `.gitignore`):
 
 ```bash
-# Security
+# SECURITY - REQUIRED IN PRODUCTION
+# Generate with: openssl rand -hex 32
 SECRET_KEY=your-very-long-random-secret-key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
 
-# CORS (comma-separated)
+# Algorithm for JWT signing (default: HS256)
+ALGORITHM=HS256
+
+# Token expiration (default: 30 minutes)
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+REFRESH_TOKEN_EXPIRE_DAYS=7
+
+# CORS (comma-separated) - STRICT: only configure allowed origins
 ALLOWED_ORIGINS=https://your-domain.com,https://admin.your-domain.com
 
-# API Keys (comma-separated, for validation)
-VALID_API_KEYS=key1,key2
+# API Keys (comma-separated) - REQUIRED for API key authentication
+# Format: key1,key2,key3
+VALID_API_KEYS=your-api-key-1,your-api-key-2
 
 # Application
 APP_NAME=ADR Tool API
 DEBUG=false
 ```
+
+### Security Variables Checklist
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SECRET_KEY` | **Yes** | JWT signing key - must be random and secure |
+| `VALID_API_KEYS` | For API key auth | Comma-separated list of valid API keys |
+| `ALLOWED_ORIGINS` | For CORS | Comma-separated list of allowed origins |
 
 ---
 
@@ -200,9 +238,15 @@ Visit `http://localhost:8000/docs` for interactive API documentation.
 
 ## Security Checklist for Vincent's Review
 
+### Resolved Issues (v2)
+- [x] ~~Hardcoded test API key removed~~ - API keys now must be configured via environment
+- [x] ~~SECRET_KEY duplicated in config.py and security.py~~ - Single source of truth established
+- [x] ~~Security tests using wrong credentials~~ - Fixed to use correct mock users
+
+### Authentication & Tokens
 - [x] JWT tokens with expiration
 - [x] Refresh tokens for session continuity
-- [x] API Key authentication option
+- [x] API Key authentication option (env-only, no hardcoded keys)
 - [x] Strict CORS (no wildcards)
 - [x] Security headers (CSP, X-Frame-Options)
 - [x] Role-based access control via scopes

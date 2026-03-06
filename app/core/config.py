@@ -1,9 +1,15 @@
 """
 Core configuration for ADR Tool API.
+
+SECURITY: SECRET_KEY is sourced from security.py for single source of truth.
+Do NOT define SECRET_KEY here - import it from app.core.security instead.
 """
 from pydantic_settings import BaseSettings
 from typing import List, Optional
 import os
+
+# Import SECRET_KEY from security.py for single source of truth
+from app.core.security import SECRET_KEY, ALGORITHM, ACCESS_TOKEN_EXPIRE_MINUTES
 
 
 class Settings(BaseSettings):
@@ -18,10 +24,8 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     PORT: int = 8000
     
-    # Security
-    SECRET_KEY: str = "CHANGE_ME_IN_PRODUCTION"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    # Security - Now imported from security.py (single source of truth)
+    # Removed duplicate SECRET_KEY definition
     
     # CORS - Comma-separated list of allowed origins
     ALLOWED_ORIGINS: str = ""

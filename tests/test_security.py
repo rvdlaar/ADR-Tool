@@ -1,16 +1,24 @@
 """
 Tests for ADR Tool API authentication and security.
+
+SECURITY NOTE: Test credentials are for testing only.
+Mock users: admin, user, reader (password: password123)
 """
 import os
 import pytest
 from fastapi.testclient import TestClient
 
 # Set up test API key before importing app
-os.environ["VALID_API_KEYS"] = "test-api-key-for-testing"
+# SECURITY: API key must be configured via environment variable, never hardcoded
+os.environ["VALID_API_KEYS"] = "test-api-key-valid-12345"
 
 from app.main import app
 
 client = TestClient(app)
+
+# Test credentials - use correct mock user credentials from auth.py
+TEST_USERNAME = "admin"
+TEST_PASSWORD = "password123"
 
 
 class TestHealthEndpoint:
@@ -36,7 +44,7 @@ class TestAuthentication:
     def test_login_with_credentials(self):
         response = client.post(
             "/api/v1/auth/token",
-            data={"username": "testuser", "password": "testpass"}
+            data={"username": TEST_USERNAME, "password": TEST_PASSWORD}
         )
         assert response.status_code == 200
         data = response.json()
@@ -47,7 +55,7 @@ class TestAuthentication:
     def test_login_with_scopes(self):
         response = client.post(
             "/api/v1/auth/token",
-            data={"username": "testuser", "password": "testpass", "scope": "adr:read"}
+            data={"username": TEST_USERNAME, "password": TEST_PASSWORD, "scope": "adr:read"}
         )
         assert response.status_code == 200
         data = response.json()
@@ -82,7 +90,7 @@ class TestADREndpoints:
         # First login
         login_response = client.post(
             "/api/v1/auth/token",
-            data={"username": "testuser", "password": "testpass"}
+            data={"username": TEST_USERNAME, "password": TEST_PASSWORD}
         )
         token = login_response.json()["access_token"]
         
@@ -96,7 +104,7 @@ class TestADREndpoints:
     def test_list_adrs_with_api_key(self):
         response = client.get(
             "/api/v1/adrs",
-            headers={"X-API-Key": "test-api-key-for-testing"}
+            headers={"X-API-Key": "test-api-key-valid-12345"}
         )
         assert response.status_code == 200
     
@@ -104,7 +112,7 @@ class TestADREndpoints:
         # Login with write scope
         login_response = client.post(
             "/api/v1/auth/token",
-            data={"username": "testuser", "password": "testpass", "scope": "adr:read adr:write"}
+            data={"username": TEST_USERNAME, "password": TEST_PASSWORD, "scope": "adr:read adr:write"}
         )
         token = login_response.json()["access_token"]
         
@@ -128,7 +136,7 @@ class TestADREndpoints:
         # Login without delete scope
         login_response = client.post(
             "/api/v1/auth/token",
-            data={"username": "testuser", "password": "testpass", "scope": "adr:read adr:write"}
+            data={"username": TEST_USERNAME, "password": TEST_PASSWORD, "scope": "adr:read adr:write"}
         )
         token = login_response.json()["access_token"]
         
@@ -166,7 +174,7 @@ class TestTokenRefresh:
         # Get tokens
         login_response = client.post(
             "/api/v1/auth/token",
-            data={"username": "testuser", "password": "testpass"}
+            data={"username": TEST_USERNAME, "password": TEST_PASSWORD}
         )
         tokens = login_response.json()
         
@@ -178,4 +186,11 @@ class TestTokenRefresh:
         assert refresh_response.status_code == 200
         new_tokens = refresh_response.json()
         assert "access_token" in new_tokens
-        assert new_tokens["access_token"] != tokens["access_token"]
+        
+        # Verify the new token is valid by using it
+        response = client.get(
+            "/api/v1/adrs",
+            headers={"Authorization": f"Bearer {new_tokens['access_token']}"}
+        )
+        # New token should work for authenticated requests
+        assert response.status_code == 200

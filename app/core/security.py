@@ -104,14 +104,10 @@ class APIKey(BaseModel):
 
 
 # ============================================================================
-# Password Hashing (using bcrypt via passlib)
+# Password Hashing (using bcrypt directly for compatibility)
 # ============================================================================
 
-from passlib.context import CryptContext
-
-# Configure bcrypt context for password hashing
-# Uses bcrypt as the hashing algorithm with appropriate rounds
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -126,7 +122,10 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         True if password matches, False otherwise
     """
     try:
-        return pwd_context.verify(plain_password, hashed_password)
+        return bcrypt.checkpw(
+            plain_password.encode('utf-8'), 
+            hashed_password.encode('utf-8')
+        )
     except Exception:
         # If hash is malformed or other error, return False
         return False
@@ -142,7 +141,10 @@ def get_password_hash(password: str) -> str:
     Returns:
         The bcrypt hash of the password
     """
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(
+        password.encode('utf-8'), 
+        bcrypt.gensalt()
+    ).decode('utf-8')
 
 
 # ============================================================================

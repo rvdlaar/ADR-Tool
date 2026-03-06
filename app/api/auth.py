@@ -59,25 +59,29 @@ class APIKeyResponse(BaseModel):
 # Mock User Database (In Production, replace with real database)
 # =============================================================================
 # Users are stored as: username -> {password_hash, scopes}
-# Password hashes are bcrypt hashes generated using get_password_hash()
+# Password hashes are bcrypt hashes generated using bcrypt.hashpw()
 # 
 # Demo users (password: "password123"):
 # - admin: has all adr scopes + admin scopes
 # - user: has read/write scopes
 # - reader: has read-only scope
+#
+# NOTE: bcrypt hash regenerated for compatibility with bcrypt 4.x
 
 MOCK_USERS_DB = {
     "admin": {
         # bcrypt hash of "password123"
-        "password_hash": "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5ePLF3Sp.cq3q",
+        "password_hash": "$2b$12$TS9XMj7NlNPosO1M6.PU1e2T.o6haYEZMG04Hzc0859z3FIxwc.Xi",
         "scopes": ["adr:read", "adr:write", "adr:delete", "admin:users", "admin:settings"]
     },
     "user": {
-        "password_hash": "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5ePLF3Sp.cq3q",
+        # bcrypt hash of "password123"
+        "password_hash": "$2b$12$TS9XMj7NlNPosO1M6.PU1e2T.o6haYEZMG04Hzc0859z3FIxwc.Xi",
         "scopes": ["adr:read", "adr:write"]
     },
     "reader": {
-        "password_hash": "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5ePLF3Sp.cq3q",
+        # bcrypt hash of "password123"
+        "password_hash": "$2b$12$TS9XMj7NlNPosO1M6.PU1e2T.o6haYEZMG04Hzc0859z3FIxwc.Xi",
         "scopes": ["adr:read"]
     },
 }
@@ -138,7 +142,13 @@ async def login(
         )
     
     # Parse requested scopes - validate against user's allowed scopes
-    requested_scopes = form_data.scopes.split() if form_data.scopes else []
+    # form_data.scopes can be a string or list depending on FastAPI version
+    if isinstance(form_data.scopes, list):
+        requested_scopes = form_data.scopes
+    elif isinstance(form_data.scopes, str) and form_data.scopes:
+        requested_scopes = form_data.scopes.split()
+    else:
+        requested_scopes = []
     
     # Filter to only scopes the user is allowed to have
     valid_scopes = []
