@@ -1,0 +1,3 @@
+# AI Provider Configuration
+openai>=1.12.0
+httpx>=0.26.0
