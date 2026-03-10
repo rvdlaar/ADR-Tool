@@ -2,7 +2,6 @@
 ADR Tool API - FastAPI application with robust authentication and CORS.
 """
 import os
-
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uuid
@@ -11,33 +10,78 @@ import time
 from app.core.config import settings
 from app.core.cors import SecurityHeadersMiddleware, setup_cors
 
-# Gate /docs and /redoc: only available in development
-_is_dev = os.getenv("ENVIRONMENT", "development") == "development"
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+
+# Determine environment
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+IS_PRODUCTION = ENVIRONMENT != "development"
+
+# Rate limit from config
+rate_limit = os.getenv("RATE_LIMIT_PER_MINUTE", "60")
+limiter = Limiter(key_func=get_remote_address, default_limits=[f"{rate_limit}/minute"])
+
+# Gate /docs and /redoc behind environment check
+docs_url = None if IS_PRODUCTION else "/docs"
+redoc_url = None if IS_PRODUCTION else "/redoc"
+openapi_url = None if IS_PRODUCTION else "/openapi.json"
 
 # Create FastAPI application
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="Secure REST API for managing Architecture Decision Records.",
-    docs_url="/docs" if _is_dev else None,
-    redoc_url="/redoc" if _is_dev else None,
-    openapi_url="/openapi.json" if _is_dev else None,
+    description="""
+## ADR Tool API
+
+A secure REST API for managing Architecture Decision Records (ADRs).
+
+### Authentication
+
+The API supports two authentication methods:
+
+1. **OAuth2 JWT Tokens** (recommended)
+   - Login with username/password to get access token
+   - Use the access token in the Authorization header: `Bearer <token>`
+
+2. **API Keys** (for server-to-server)
+   - Create an API key via the admin endpoints
+   - Use the API key in the X-API-Key header
+
+### Scopes
+
+- `adr:read` - Read ADR records
+- `adr:write` - Create and update ADRs
+- `adr:delete` - Delete ADRs
+- `admin:users` - Manage users
+- `admin:settings` - Manage API settings
+
+### Security Features
+
+- Strict CORS policies (only configured origins allowed)
+- JWT access and refresh tokens
+- API Key authentication
+- Role-based access control via scopes
+- Security headers (CSP, X-Frame-Options, etc.)
+- Rate limiting (configurable)
+""",
+    docs_url=docs_url,
+    redoc_url=redoc_url,
+    openapi_url=openapi_url,
 )
+
+# Attach rate limiter to app state
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
 
 # Setup CORS (before routes)
 setup_cors(app)
 
 # Add security headers
 app.add_middleware(SecurityHeadersMiddleware)
-
-# Rate limiting
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
-
-limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # =============================================================================
@@ -49,10 +93,10 @@ async def add_request_id(request: Request, call_next):
     """Add unique request ID to each request"""
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
-    
+
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
-    
+
     return response
 
 
@@ -104,9 +148,11 @@ app.include_router(ai_generate.router, prefix="/api/v1")
 @app.get("/")
 async def root():
     """Root endpoint"""
-    return {
+    result = {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "docs": "/docs",
         "health": "/health"
     }
+    if not IS_PRODUCTION:
+        result["docs"] = "/docs"
+    return result
