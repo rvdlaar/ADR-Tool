@@ -56,59 +56,23 @@ class APIKeyResponse(BaseModel):
 
 
 # =============================================================================
-# Mock User Database (In Production, replace with real database)
+# User Database (SQLite-backed persistent store)
 # =============================================================================
-# Users are stored as: username -> {password_hash, scopes}
-# Password hashes are bcrypt hashes generated using bcrypt.hashpw()
-# 
-# Demo users (password: "password123"):
-# - admin: has all adr scopes + admin scopes
-# - user: has read/write scopes
-# - reader: has read-only scope
-#
-# NOTE: bcrypt hash regenerated for compatibility with bcrypt 4.x
-
-MOCK_USERS_DB = {
-    "admin": {
-        # bcrypt hash of "password123"
-        "password_hash": "$2b$12$TS9XMj7NlNPosO1M6.PU1e2T.o6haYEZMG04Hzc0859z3FIxwc.Xi",
-        "scopes": ["adr:read", "adr:write", "adr:delete", "admin:users", "admin:settings"]
-    },
-    "user": {
-        # bcrypt hash of "password123"
-        "password_hash": "$2b$12$TS9XMj7NlNPosO1M6.PU1e2T.o6haYEZMG04Hzc0859z3FIxwc.Xi",
-        "scopes": ["adr:read", "adr:write"]
-    },
-    "reader": {
-        # bcrypt hash of "password123"
-        "password_hash": "$2b$12$TS9XMj7NlNPosO1M6.PU1e2T.o6haYEZMG04Hzc0859z3FIxwc.Xi",
-        "scopes": ["adr:read"]
-    },
-}
+from app.db.users import verify_user_password, get_user_by_username
 
 
 def authenticate_user(username: str, password: str) -> Optional[dict]:
     """
-    Authenticate a user with username and password.
-    
-    Uses passlib's bcrypt verify function for secure password verification.
-    
+    Authenticate a user with username and password against the SQLite user store.
+
     Args:
         username: The username to authenticate
         password: The plain text password to verify
-        
+
     Returns:
         User data dict if authentication succeeds, None otherwise
     """
-    user = MOCK_USERS_DB.get(username)
-    if not user:
-        return None
-    
-    # Use passlib's verify_password for secure bcrypt comparison
-    if not verify_password(password, user["password_hash"]):
-        return None
-    
-    return user
+    return verify_user_password(username, password)
 
 
 # =============================================================================

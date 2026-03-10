@@ -1,6 +1,8 @@
 """
 ADR Tool API - FastAPI application with robust authentication and CORS.
 """
+import os
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 import uuid
@@ -9,47 +11,17 @@ import time
 from app.core.config import settings
 from app.core.cors import SecurityHeadersMiddleware, setup_cors
 
+# Gate /docs and /redoc: only available in development
+_is_dev = os.getenv("ENVIRONMENT", "development") == "development"
+
 # Create FastAPI application
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
-    description="""
-## ADR Tool API
-
-A secure REST API for managing Architecture Decision Records (ADRs).
-
-### Authentication
-
-The API supports two authentication methods:
-
-1. **OAuth2 JWT Tokens** (recommended)
-   - Login with username/password to get access token
-   - Use the access token in the Authorization header: `Bearer <token>`
-
-2. **API Keys** (for server-to-server)
-   - Create an API key via the admin endpoints
-   - Use the API key in the X-API-Key header
-
-### Scopes
-
-- `adr:read` - Read ADR records
-- `adr:write` - Create and update ADRs
-- `adr:delete` - Delete ADRs
-- `admin:users` - Manage users
-- `admin:settings` - Manage API settings
-
-### Security Features
-
-- Strict CORS policies (only configured origins allowed)
-- JWT access and refresh tokens
-- API Key authentication
-- Role-based access control via scopes
-- Security headers (CSP, X-Frame-Options, etc.)
-- Rate limiting (configurable)
-""",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    description="Secure REST API for managing Architecture Decision Records.",
+    docs_url="/docs" if _is_dev else None,
+    redoc_url="/redoc" if _is_dev else None,
+    openapi_url="/openapi.json" if _is_dev else None,
 )
 
 # Setup CORS (before routes)
@@ -57,6 +29,15 @@ setup_cors(app)
 
 # Add security headers
 app.add_middleware(SecurityHeadersMiddleware)
+
+# Rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address, default_limits=[f"{settings.RATE_LIMIT_PER_MINUTE}/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 
 # =============================================================================
