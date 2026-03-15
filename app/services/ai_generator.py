@@ -181,27 +181,61 @@ class ADRGenerator:
         except json.JSONDecodeError as e:
             raise AIGenerationError(f"Failed to parse AI response as JSON: {e}\nResponse: {content[:500]}")
     
+    def _retrieve_rag_context(self, request: ADRGenerationRequest) -> str:
+        """Retrieve related ADRs and context docs via RAG. Gracefully degrades."""
+        try:
+            from app.services.embeddings import get_embedding_service
+            from app.services.vector_store import get_vector_store, COLLECTION_ADRS, COLLECTION_CONTEXT
+
+            vs = get_vector_store()
+            if not vs:
+                return ""
+
+            query_text = f"{request.title}\n{request.description}"
+            embedding = get_embedding_service().embed(query_text)
+
+            sections = []
+
+            # Related existing ADRs
+            adr_hits = vs.search(COLLECTION_ADRS, embedding, limit=3)
+            if adr_hits:
+                adr_texts = []
+                for h in adr_hits:
+                    adr_texts.append(f"- {h.get('document', '')[:500]}")
+                sections.append("## Related Existing Decisions\n" + "\n".join(adr_texts))
+
+            # Relevant context documents
+            doc_hits = vs.search(COLLECTION_CONTEXT, embedding, limit=2)
+            if doc_hits:
+                doc_texts = []
+                for h in doc_hits:
+                    doc_texts.append(f"- {h.get('document', '')[:500]}")
+                sections.append("## Relevant Context Documents\n" + "\n".join(doc_texts))
+
+            if sections:
+                return "\n\n".join(sections) + "\n\nConsider these when making your decision. Ensure consistency with existing ADRs.\n"
+            return ""
+        except Exception:
+            return ""
+
     def generate(self, request: ADRGenerationRequest) -> GeneratedADR:
         """
-        Generate an ADR using AI.
-        
-        Args:
-            request: The ADR generation request
-            
-        Returns:
-            GeneratedADR with the full ADR content
-            
-        Raises:
-            AIGenerationError: If generation fails
+        Generate an ADR using AI with RAG-augmented context.
+        Retrieves related ADRs and context docs before generation.
         """
-        
+
         if not self.api_key:
             raise AIGenerationError(
                 "AI_API_KEY not configured. "
                 "Set AI_API_KEY environment variable to enable AI generation."
             )
-        
+
+        # Retrieve RAG context (gracefully degrades to empty string)
+        rag_context = self._retrieve_rag_context(request)
+
         prompt = self._build_prompt(request)
+        if rag_context:
+            prompt = rag_context + "\n\n" + prompt
         
         try:
             response = self.client.chat.completions.create(

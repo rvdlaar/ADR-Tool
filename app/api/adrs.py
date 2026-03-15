@@ -1,14 +1,12 @@
 """
 ADR (Architecture Decision Records) API endpoints.
+Persistent SQLite storage via adr_store.
 """
-import uuid
-from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
 
-from app.core.security import User, get_current_user, require_scopes
+from app.core.security import User, require_scopes
 from app.models.adr import (
     ADR,
     ADRCreate,
@@ -17,16 +15,36 @@ from app.models.adr import (
     ADRUpdate,
     ADRSearchQuery,
 )
+from app.db.adr_store import (
+    create_adr as db_create,
+    get_adr as db_get,
+    list_adrs as db_list,
+    update_adr as db_update,
+    delete_adr as db_delete,
+    get_stats as db_stats,
+)
 
 router = APIRouter(prefix="/adrs", tags=["ADR"])
 
-# In-memory storage for demo (replace with database in production)
-_adrs_db: dict[str, ADR] = {}
 
+def _index_adr_in_vector_store(adr: dict):
+    """Best-effort embed and index an ADR in ChromaDB."""
+    try:
+        from app.services.embeddings import get_embedding_service
+        from app.services.vector_store import get_vector_store, COLLECTION_ADRS
+        vs = get_vector_store()
+        if not vs:
+            return
+        text = f"{adr['title']}\n{adr.get('context', '')}\n{adr.get('decision', '')}"
+        embedding = get_embedding_service().embed(text)
+        vs.upsert(COLLECTION_ADRS, adr["id"], embedding, text, {
+            "title": adr["title"],
+            "status": adr.get("status", "Proposed"),
+            "author": adr.get("author", ""),
+        })
+    except Exception:
+        pass
 
-# =============================================================================
-# Endpoints
-# =============================================================================
 
 @router.get("", response_model=ADRListResponse)
 async def list_adrs(
@@ -38,49 +56,40 @@ async def list_adrs(
     search: Optional[str] = None,
     user: User = Depends(require_scopes(["adr:read"]))
 ):
-    """
-    List all ADRs with optional filtering and pagination.
-    Requires adr:read scope.
-    """
-    adrs = list(_adrs_db.values())
-    
-    # Apply filters
-    if status_filter:
-        adrs = [adr for adr in adrs if adr.status == status_filter]
-    
-    if author:
-        adrs = [adr for adr in adrs if author.lower() in adr.author.lower()]
-    
-    if tags:
-        tag_list = [t.strip().lower() for t in tags.split(",")]
-        adrs = [adr for adr in adrs if any(t in [tg.lower() for tg in adr.tags] for t in tag_list)]
-    
-    if search:
-        search_lower = search.lower()
-        adrs = [
-            adr for adr in adrs
-            if search_lower in adr.title.lower()
-            or search_lower in adr.context.lower()
-            or search_lower in adr.decision.lower()
-        ]
-    
-    # Sort by created_at descending
-    adrs.sort(key=lambda x: x.created_at, reverse=True)
-    
-    # Paginate
-    total = len(adrs)
-    start = (page - 1) * page_size
-    end = start + page_size
-    items = adrs[start:end]
-    
+    """List all ADRs with optional filtering and pagination."""
+    tag_list = [t.strip() for t in tags.split(",")] if tags else None
+    offset = (page - 1) * page_size
+    items, total = db_list(
+        limit=page_size, offset=offset,
+        status=status_filter.value if status_filter else None,
+        author=author, search=search, tags=tag_list
+    )
     return ADRListResponse(
-        items=items,
-        total=total,
-        page=page,
-        page_size=page_size,
-        has_next=end < total,
+        items=[ADR(**_ensure_datetime(i)) for i in items],
+        total=total, page=page, page_size=page_size,
+        has_next=(offset + page_size) < total,
         has_prev=page > 1
     )
+
+
+@router.get("/search/query", response_model=ADRListResponse)
+async def search_adrs(
+    query: ADRSearchQuery = Depends(),
+    user: User = Depends(require_scopes(["adr:read"]))
+):
+    """Advanced search for ADRs."""
+    return await list_adrs(
+        page=query.page, page_size=query.page_size,
+        status_filter=query.status, author=query.author,
+        tags=",".join(query.tags) if query.tags else None,
+        search=query.q, user=user
+    )
+
+
+@router.get("/stats/summary")
+async def get_adr_stats(user: User = Depends(require_scopes(["adr:read"]))):
+    """Get ADR statistics summary."""
+    return db_stats()
 
 
 @router.get("/{adr_id}", response_model=ADR)
@@ -88,19 +97,36 @@ async def get_adr(
     adr_id: str,
     user: User = Depends(require_scopes(["adr:read"]))
 ):
-    """
-    Get a specific ADR by ID.
-    Requires adr:read scope.
-    """
-    adr = _adrs_db.get(adr_id)
-    
+    """Get a specific ADR by ID."""
+    adr = db_get(adr_id)
     if not adr:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ADR with id '{adr_id}' not found"
-        )
-    
-    return adr
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"ADR '{adr_id}' not found")
+    return ADR(**_ensure_datetime(adr))
+
+
+@router.get("/{adr_id}/similar")
+async def find_similar(
+    adr_id: str,
+    limit: int = Query(5, ge=1, le=20),
+    user: User = Depends(require_scopes(["adr:read"]))
+):
+    """Find ADRs similar to a given one via semantic search."""
+    adr = db_get(adr_id)
+    if not adr:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"ADR '{adr_id}' not found")
+    try:
+        from app.services.embeddings import get_embedding_service
+        from app.services.vector_store import get_vector_store, COLLECTION_ADRS
+        text = f"{adr['title']}\n{adr.get('context', '')}\n{adr.get('decision', '')}"
+        embedding = get_embedding_service().embed(text)
+        vs = get_vector_store()
+        if not vs:
+            return {"adr_id": adr_id, "similar": []}
+        results = vs.search(COLLECTION_ADRS, embedding, limit=limit + 1)
+        results = [r for r in results if r["id"] != adr_id][:limit]
+        return {"adr_id": adr_id, "similar": results}
+    except Exception as e:
+        return {"adr_id": adr_id, "similar": [], "error": str(e)}
 
 
 @router.post("", response_model=ADR, status_code=status.HTTP_201_CREATED)
@@ -108,28 +134,14 @@ async def create_adr(
     adr_data: ADRCreate,
     user: User = Depends(require_scopes(["adr:write"]))
 ):
-    """
-    Create a new ADR.
-    Requires adr:write scope.
-    """
-    adr_id = str(uuid.uuid4())[:8]
-    
-    adr = ADR(
-        id=adr_id,
-        title=adr_data.title,
-        context=adr_data.context,
-        decision=adr_data.decision,
-        consequences=adr_data.consequences,
-        author=user.username,
-        tags=adr_data.tags,
-        status=ADRStatus.PROPOSED,
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+    """Create a new ADR."""
+    adr = db_create(
+        title=adr_data.title, context=adr_data.context,
+        decision=adr_data.decision, consequences=adr_data.consequences,
+        author=user.username, tags=adr_data.tags
     )
-    
-    _adrs_db[adr_id] = adr
-    
-    return adr
+    _index_adr_in_vector_store(adr)
+    return ADR(**_ensure_datetime(adr))
 
 
 @router.put("/{adr_id}", response_model=ADR)
@@ -138,29 +150,17 @@ async def update_adr(
     adr_data: ADRUpdate,
     user: User = Depends(require_scopes(["adr:write"]))
 ):
-    """
-    Update an existing ADR.
-    Requires adr:write scope.
-    """
-    if adr_id not in _adrs_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ADR with id '{adr_id}' not found"
-        )
-    
-    adr = _adrs_db[adr_id]
-    
-    # Update fields
+    """Update an existing ADR."""
+    existing = db_get(adr_id)
+    if not existing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"ADR '{adr_id}' not found")
     update_data = adr_data.model_dump(exclude_unset=True)
-    
-    for field, value in update_data.items():
-        if value is not None:
-            setattr(adr, field, value)
-    
-    adr.updated_at = datetime.utcnow()
-    _adrs_db[adr_id] = adr
-    
-    return adr
+    update_data = {k: v for k, v in update_data.items() if v is not None}
+    if not update_data:
+        return ADR(**_ensure_datetime(existing))
+    adr = db_update(adr_id, **update_data)
+    _index_adr_in_vector_store(adr)
+    return ADR(**_ensure_datetime(adr))
 
 
 @router.patch("/{adr_id}/status", response_model=ADR)
@@ -170,24 +170,12 @@ async def update_adr_status(
     reason: Optional[str] = None,
     user: User = Depends(require_scopes(["adr:write"]))
 ):
-    """
-    Update ADR status (e.g., from Proposed to Accepted).
-    Requires adr:write scope.
-    """
-    if adr_id not in _adrs_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ADR with id '{adr_id}' not found"
-        )
-    
-    adr = _adrs_db[adr_id]
-    old_status = adr.status
-    adr.status = new_status
-    adr.updated_at = datetime.utcnow()
-    
-    _adrs_db[adr_id] = adr
-    
-    return adr
+    """Update ADR status."""
+    existing = db_get(adr_id)
+    if not existing:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"ADR '{adr_id}' not found")
+    adr = db_update(adr_id, status=new_status.value)
+    return ADR(**_ensure_datetime(adr))
 
 
 @router.delete("/{adr_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -195,61 +183,28 @@ async def delete_adr(
     adr_id: str,
     user: User = Depends(require_scopes(["adr:delete"]))
 ):
-    """
-    Delete an ADR.
-    Requires adr:delete scope.
-    """
-    if adr_id not in _adrs_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ADR with id '{adr_id}' not found"
-        )
-    
-    del _adrs_db[adr_id]
-    
+    """Delete an ADR."""
+    if not db_delete(adr_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"ADR '{adr_id}' not found")
+    try:
+        from app.services.vector_store import get_vector_store, COLLECTION_ADRS
+        vs = get_vector_store()
+        if vs:
+            vs.delete(COLLECTION_ADRS, adr_id)
+    except Exception:
+        pass
     return None
 
 
-@router.get("/search/query", response_model=ADRListResponse)
-async def search_adrs(
-    query: ADRSearchQuery = Depends(),
-    user: User = Depends(require_scopes(["adr:read"]))
-):
-    """
-    Advanced search for ADRs.
-    Requires adr:read scope.
-    """
-    return await list_adrs(
-        page=query.page,
-        page_size=query.page_size,
-        status_filter=query.status,
-        author=query.author,
-        tags=",".join(query.tags) if query.tags else None,
-        search=query.q,
-        user=user
-    )
-
-
-@router.get("/stats/summary")
-async def get_adr_stats(
-    user: User = Depends(require_scopes(["adr:read"]))
-):
-    """
-    Get ADR statistics summary.
-    Requires adr:read scope.
-    """
-    adrs = list(_adrs_db.values())
-    
-    status_counts = {}
-    for status in ADRStatus:
-        count = sum(1 for adr in adrs if adr.status == status)
-        status_counts[status.value] = count
-    
-    return {
-        "total": len(adrs),
-        "by_status": status_counts,
-        "recent_count": sum(
-            1 for adr in adrs
-            if (datetime.utcnow() - adr.created_at).days < 30
-        )
-    }
+def _ensure_datetime(d: dict) -> dict:
+    """Ensure datetime fields are datetime objects for Pydantic."""
+    from datetime import datetime
+    out = dict(d)
+    for key in ("created_at", "updated_at"):
+        v = out.get(key)
+        if isinstance(v, str):
+            try:
+                out[key] = datetime.fromisoformat(v)
+            except (ValueError, TypeError):
+                out[key] = datetime.utcnow()
+    return out
