@@ -47,7 +47,7 @@ async def generate_adr(
         generator = get_generator()
 
         # 1. Generate ADR
-        generated = await generator.generate_async(request)
+        generated, provenance = await generator.generate_async(request)
 
         # 2. Layer 1: Free heuristic validation
         validation = validate_adr(generated, constraints=request.constraints)
@@ -55,7 +55,6 @@ async def generate_adr(
         # 3. Layer 2: If Layer 1 flags issues, use cheap LLM scoring
         if not validation.passed:
             llm_result = llm_validate_adr(generated, generator)
-            # Merge: take the LOWER score (conservative), combine suggestions
             validation.llm_validated = True
             validation.score = min(validation.score, llm_result.score)
             validation.passed = validation.score >= 7
@@ -64,7 +63,7 @@ async def generate_adr(
             # 4. Auto-retry if score < 7 (max 1 retry)
             if not validation.passed:
                 feedback = "Issues found:\n" + "\n".join(validation.issues + validation.suggestions)
-                generated = await generator.generate_async(request, feedback=feedback)
+                generated, provenance = await generator.generate_async(request, feedback=feedback)
                 validation = validate_adr(generated, constraints=request.constraints)
                 validation.retried = True
 
@@ -107,7 +106,8 @@ async def generate_adr(
             validation=validation.model_dump(),
             conflicts=conflicts,
             conflict_warning=conflict_warning,
-            rag_context_used=True,  # RAG is always attempted
+            rag_context_used=bool(provenance),
+            related_adrs=provenance,
             model_used=generator.model,
             profile=request.profile,
             review_required=True,
@@ -128,7 +128,7 @@ async def generate_adr_draft(
     """Generate an ADR draft without saving. For preview before committing."""
     try:
         generator = get_generator()
-        generated = await generator.generate_async(request)
+        generated, provenance = await generator.generate_async(request)
         validation = validate_adr(generated, constraints=request.constraints)
         conflicts = detect_conflicts(generated)
 

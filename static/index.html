@@ -146,7 +146,7 @@ html{font-size:16px;-webkit-font-smoothing:antialiased}body{font-family:var(--sa
 
 <!-- LIST -->
 <div class="view on" id="v-list">
-  <div class="lh"><h1>Decision Registry</h1><button class="btn btn-p" onclick="go('create')">New decision</button></div>
+  <div class="lh"><h1>Decision Registry</h1><div style="display:flex;gap:.375rem"><button class="btn btn-s" onclick="bulkExport()" title="Download all as Markdown">Export all</button><button class="btn btn-p" onclick="go('create')">New decision</button></div></div>
   <input class="filter" placeholder="Filter..." id="flt" oninput="flt()">
   <div id="ls"></div>
 </div>
@@ -172,6 +172,7 @@ html{font-size:16px;-webkit-font-smoothing:antialiased}body{font-family:var(--sa
       <div class="f"><label>Scope</label><input class="inp" name="scope" placeholder="REST APIs only, not gRPC"></div>
       <div class="f"><label>Profile</label><select class="sel" name="profile"><option value="detailed">Detailed — metric-driven</option><option value="guided">Guided — with explanations</option></select></div>
     </div>
+    <div class="f" id="supersedeField" style="display:none"><label>Supersedes</label><select class="sel" id="supersedeSelect"><option value="">— none —</option></select><div class="f-hint">The selected ADR will be marked as Superseded when this one is created.</div></div>
     <div class="f-actions"><button type="submit" class="btn btn-p">Generate ADR</button><button type="button" class="btn" onclick="go('list')">Cancel</button></div>
   </form>
 </div>
@@ -231,12 +232,14 @@ async function auth(){try{const r=await fetch(`${API}/auth/token`,{method:'POST'
 const H=()=>{const o={'Content-Type':'application/json'};if(tk)o['Authorization']=`Bearer ${tk}`;return o};
 
 // Nav
-function go(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('on'));document.getElementById('v-'+v)?.classList.add('on');document.querySelectorAll('.bar-link').forEach(e=>e.classList.remove('on'));const m={list:0,create:1,search:2,kb:3};if(m[v]!==undefined)document.querySelectorAll('.bar-link')[m[v]]?.classList.add('on');if(v==='list')loadL();if(v==='search')document.getElementById('sQ')?.focus();if(v==='kb')loadKB();if(v==='create')document.querySelector('[name=title]')?.focus()}
+function go(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('on'));document.getElementById('v-'+v)?.classList.add('on');document.querySelectorAll('.bar-link').forEach(e=>e.classList.remove('on'));const m={list:0,create:1,search:2,kb:3};if(m[v]!==undefined)document.querySelectorAll('.bar-link')[m[v]]?.classList.add('on');if(v==='list')loadL();if(v==='search')document.getElementById('sQ')?.focus();if(v==='kb')loadKB();if(v==='create'){document.querySelector('[name=title]')?.focus();populateSupersede()}}
 
 // List
 async function loadL(){try{const r=await fetch(`${API}/adrs?page_size=50`,{headers:H()});const d=await r.json();adrs=d.items||[];renderL(adrs);const s=await fetch(`${API}/adrs/stats/summary`,{headers:H()}).then(r=>r.json());document.getElementById('stats').textContent=`${s.total||0} decisions`}catch{renderL([])}}
 function renderL(ls){const el=document.getElementById('ls');if(!ls.length){el.innerHTML='<div class="empty"><h3>No decisions yet</h3><p>Architecture Decision Records capture the <em>why</em> behind technical choices. Start with a title and brief context — the AI handles the rest.</p><button class="btn btn-p" onclick="go(\'create\')">Record your first decision</button></div>';return}
-el.innerHTML=ls.map((a,i)=>{const n=a.title?.match(/^(\d+)\./)?.[1]||(i+1);const t=a.title?.replace(/^\d+\.\s*/,'')||a.title;const sc=(a.status||'Proposed').toLowerCase();return`<div class="entry" onclick="det('${a.id}')"><span class="entry-n">${n}.</span><div><div class="entry-t">${esc(t)}</div>${a.y_statement?`<div class="entry-y">${esc(a.y_statement)}</div>`:''}</div><span class="entry-s s-${sc}">${a.status||'Proposed'}</span></div>`}).join('')}
+el.innerHTML=ls.map((a,i)=>{const n=a.title?.match(/^(\d+)\./)?.[1]||(i+1);const t=a.title?.replace(/^\d+\.\s*/,'')||a.title;const sc=(a.status||'Proposed').toLowerCase();const days=a.created_at?Math.floor((Date.now()-new Date(a.created_at).getTime())/86400000):0;
+const stale=days>90&&sc!=='superseded'&&sc!=='deprecated';
+return`<div class="entry" onclick="det('${a.id}')"><span class="entry-n">${n}.</span><div><div class="entry-t">${esc(t)}${stale?`<span style="font-size:.5625rem;color:var(--amber);margin-left:.375rem">${days}d</span>`:''}</div>${a.y_statement?`<div class="entry-y">${esc(a.y_statement)}</div>`:''}</div><span class="entry-s s-${sc}">${a.status||'Proposed'}</span></div>`}).join('')}
 function flt(){const q=document.getElementById('flt').value.toLowerCase();renderL(adrs.filter(a=>(a.title||'').toLowerCase().includes(q)||(a.context||'').toLowerCase().includes(q)||(a.decision||'').toLowerCase().includes(q)))}
 
 // Detail
@@ -252,12 +255,16 @@ function renderD(a,data){
   const isNew=!!data;
   let acts=`<button class="btn btn-s" onclick="copyMD()">Copy as Markdown</button><button class="btn btn-s" onclick="downloadMD()">Download .md</button>`;
   if(!isNew){acts+=`<button class="btn btn-s" onclick="editMode()">Edit</button><button class="btn btn-s" onclick="chgStatus()">Change status</button><button class="btn btn-s btn-red" onclick="delADR()">Delete</button>`}
+  // Staleness indicator
+  if(a.created_at&&!isNew){const days=Math.floor((Date.now()-new Date(a.created_at).getTime())/86400000);if(days>90)acts+=`<span style="font-size:.6875rem;color:var(--amber);margin-left:.5rem">${days} days old — consider reviewing</span>`}
   document.getElementById('dAct').innerHTML=acts;
 
   // Banners
   let ban='';
   if(data?.validation){const v=data.validation;const c=v.score>=8?'pass':v.score>=6?'warn':'fail';ban+=`<div class="banner b-${c}"><div class="b-score" style="color:var(--${c==='pass'?'green':c==='warn'?'amber':'red'})">${v.score}/10</div><div><h4>${v.score>=8?'High quality':v.score>=6?'Review suggested':'Needs work'}${v.retried?' (retried)':''}</h4><p>${v.issues?.join('; ')||'No issues.'}${v.suggestions?.length?'<br>'+v.suggestions.map(s=>'· '+esc(s)).join('<br>'):''}</p></div></div>`}
   if(data?.conflicts?.length){ban+=`<div class="banner b-fail"><div><h4>${data.conflicts.length} conflict${data.conflicts.length>1?'s':''}</h4>${data.conflicts.map(c=>`<p>${esc(c.reason)}</p>`).join('')}</div></div>`}
+  // Provenance: show which docs informed this generation
+  if(data?.related_adrs?.length){ban+=`<div style="font-size:.6875rem;color:var(--t3);margin-bottom:1rem;line-height:1.6"><strong style="color:var(--t2)">Informed by:</strong> ${data.related_adrs.map(r=>`${esc(r.title)} (${r.type}, ${Math.round(r.score*100)}%)`).join(' · ')}</div>`}
   document.getElementById('dB').innerHTML=ban;
 
   const editable=isNew;
@@ -266,7 +273,14 @@ function renderD(a,data){
 
   const secs=[{k:'context',l:'Context'},{k:'decision_drivers',l:'Decision Drivers'},{k:'decision',l:'Decision'},{k:'alternatives_considered',l:'Alternatives'},{k:'consequences',l:'Consequences'},{k:'impact',l:'Impact'},{k:'reversibility',l:'Reversibility'},{k:'related_decisions',l:'Related'}].filter(s=>a[s.k]);
   document.getElementById('dToc').innerHTML=secs.map(s=>`<div class="toc-i" onclick="document.getElementById('s-${s.k}')?.scrollIntoView({behavior:'smooth'});document.querySelectorAll('.toc-i').forEach(e=>e.classList.remove('on'));this.classList.add('on')">${s.l}</div>`).join('');
-  document.getElementById('dSec').innerHTML=secs.map(s=>`<div class="sec" id="s-${s.k}"><div class="sec-l">${s.l}</div><div class="sec-b" ${editable?`contenteditable="true" data-key="${s.k}"`:''} >${md(a[s.k])}</div></div>`).join('');
+  // Section-level validation: highlight weak sections
+  const weakSecs=new Set();
+  if(data?.validation?.issues){for(const issue of data.validation.issues){const m=issue.match(/Section '(\w+)'/i)||issue.match(/^'(\w+)'/);if(m)weakSecs.add(m[1])}}
+  if(data?.validation?.vague_terms_found?.length){['decision','consequences','impact','alternatives_considered'].forEach(k=>{if(a[k]){const t=(a[k]||'').toLowerCase();for(const v of(data.validation.vague_terms_found||[])){if(t.includes(v.toLowerCase()))weakSecs.add(k)}}})}
+
+  document.getElementById('dSec').innerHTML=secs.map(s=>{
+    const weak=weakSecs.has(s.k);
+    return`<div class="sec" id="s-${s.k}"><div class="sec-l">${s.l}${weak?'<span style="color:var(--amber);margin-left:.375rem;font-size:.5625rem;font-weight:400;text-transform:none;letter-spacing:0">needs specificity</span>':''}</div><div class="sec-b" ${editable?`contenteditable="true" data-key="${s.k}"`:''} style="${weak?'border-left:2px solid var(--amber);padding-left:.75rem':''}">${md(a[s.k])}</div></div>`}).join('');
 }
 
 function editMode(){
@@ -320,7 +334,11 @@ async function gen(e){
   const body={title:f.title.value,description:f.description.value,context:[f.context?.value,document.getElementById('kbPaste')?.value].filter(Boolean).join('\n\n')||undefined,profile:f.profile?.value||'detailed',requirements:tg.req.length?tg.req:undefined,constraints:tg.con.length?tg.con:undefined,alternatives:tg.alt.length?tg.alt:undefined,decision_drivers:tg.drv.length?tg.drv:undefined,impacted_roles:[...document.querySelectorAll('.chip.on')].map(c=>c.textContent.trim())||undefined,success_criteria:tg.suc.length?tg.suc:undefined,timeline:f.timeline?.value||undefined,scope:f.scope?.value||undefined};
   Object.keys(body).forEach(k=>{if(!body[k]||(Array.isArray(body[k])&&!body[k].length))delete body[k]});
   try{const r=await fetch(`${API}/adrs/generate`,{method:'POST',headers:H(),body:JSON.stringify(body),signal:genCtrl.signal});const d=await r.json();clearInterval(iv);o.classList.remove('on');
-  if(d.generated&&d.adr){renderD(d.adr,d);go('detail');f.reset();Object.keys(tg).forEach(k=>{tg[k]=[];document.getElementById('t-'+k)&&(document.getElementById('t-'+k).innerHTML='')});document.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'))}else{toast(d.detail||'Generation failed','err')}}
+  if(d.generated&&d.adr){
+  // Handle supersession
+  const supId=document.getElementById('supersedeSelect')?.value;
+  if(supId){try{await fetch(`${API}/adrs/${supId}/status?new_status=Superseded`,{method:'PATCH',headers:H()})}catch{}}
+  renderD(d.adr,d);go('detail');f.reset();Object.keys(tg).forEach(k=>{tg[k]=[];document.getElementById('t-'+k)&&(document.getElementById('t-'+k).innerHTML='')});document.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'))}else{toast(d.detail||'Generation failed','err')}}
   catch(err){clearInterval(iv);o.classList.remove('on');if(err.name!=='AbortError')toast(err.message,'err')}}
 function cancelGen(){if(genCtrl)genCtrl.abort();document.getElementById('genO').classList.remove('on')}
 
@@ -328,7 +346,14 @@ function cancelGen(){if(genCtrl)genCtrl.abort();document.getElementById('genO').
 async function doS(){const q=document.getElementById('sQ').value;if(!q||q.length<2)return;
 try{const r=await fetch(`${API}/rag/search?q=${encodeURIComponent(q)}&limit=10`,{headers:H()});const d=await r.json();const el=document.getElementById('sR');
 if(!d.results?.length){el.innerHTML='<div class="empty"><p>No results.</p></div>';return}
-el.innerHTML=d.results.map(r=>{const isADR=r.collection==='adrs';return`<div class="hit" ${isADR?`onclick="det('${r.id}')"`:''}><h4>${esc(r.metadata?.title||r.id)}</h4><p>${esc((r.document||'').slice(0,180))}</p><div class="hit-m">${Math.round(r.score*100)}% · ${r.collection||''}</div></div>`}).join('')}catch{}}
+el.innerHTML=d.results.map(r=>{const isADR=r.collection==='adrs';
+// Find which section the query matched in
+const doc=(r.document||'').toLowerCase();const ql=q.toLowerCase();
+let matchSec='';
+const secNames=[['context','Context'],['decision','Decision'],['consequences','Consequences'],['alternatives','Alternatives'],['impact','Impact'],['reversibility','Reversibility']];
+for(const[k,l]of secNames){const idx=doc.indexOf(k);if(idx>=0){const chunk=doc.slice(idx,idx+500);if(chunk.includes(ql)){matchSec=l;break}}}
+if(!matchSec&&doc.includes(ql))matchSec='Title/Body';
+return`<div class="hit" ${isADR?`onclick="det('${r.id}')"`:''}><h4>${esc(r.metadata?.title||r.id)}${matchSec?` <span style="font-size:.625rem;color:var(--t3);font-weight:400">matched in ${matchSec}</span>`:''}</h4><p>${esc((r.document||'').slice(0,180))}</p><div class="hit-m">${Math.round(r.score*100)}% · ${r.collection||''}</div></div>`}).join('')}catch{}}
 
 // Knowledge Base
 async function loadKB(){
@@ -378,6 +403,24 @@ async function ingestText(){const text=document.getElementById('kbPaste')?.value
 try{await fetch(`${API}/../api/v1/ingest/api`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',...(tk?{Authorization:`Bearer ${tk}`}:{})},body:new URLSearchParams({filename:'pasted-text.md',content:text})}).catch(()=>{});
 // Also try our RAG ingest
 toast('Text ingested','ok');document.getElementById('kbPaste').value='';loadKB()}catch{}}
+
+// Supersession
+function populateSupersede(){
+  const sel=document.getElementById('supersedeSelect');if(!sel)return;
+  sel.innerHTML='<option value="">— none —</option>'+adrs.filter(a=>a.status!=='Superseded').map(a=>`<option value="${a.id}">${esc(a.title)}</option>`).join('');
+  document.getElementById('supersedeField').style.display='block';
+}
+
+// Bulk export — all ADRs as one download
+function bulkExport(){
+  if(!adrs.length){toast('No ADRs to export','err');return}
+  const combined=adrs.map(a=>toMarkdown(a)).join('\n\n---\n\n');
+  const blob=new Blob([combined],{type:'text/markdown'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`adr-registry-${new Date().toISOString().slice(0,10)}.md`;a.click();
+  URL.revokeObjectURL(url);
+  toast(`Exported ${adrs.length} ADRs`,'ok');
+}
 
 // Tags
 const tg={req:[],con:[],alt:[],drv:[],suc:[]};

@@ -197,50 +197,59 @@ class ADRGenerator:
         except json.JSONDecodeError as e:
             raise AIGenerationError(f"Failed to parse AI response: {e}\nResponse: {content[:500]}")
 
-    def _retrieve_rag_context(self, request: ADRGenerationRequest) -> str:
-        """Retrieve related ADRs and context docs. Returns structured context."""
+    def _retrieve_rag_context(self, request: ADRGenerationRequest) -> tuple[str, list]:
+        """Retrieve related ADRs and context docs. Returns (prompt_context, provenance_list)."""
+        provenance = []
         try:
             from app.services.embeddings import get_embedding_service
             from app.services.vector_store import get_vector_store, COLLECTION_ADRS, COLLECTION_CONTEXT
 
             vs = get_vector_store()
             if not vs:
-                return ""
+                return "", []
 
             query_text = f"{request.title}\n{request.description}"
             embedding = get_embedding_service().embed(query_text)
             sections = []
 
-            # Top 3 related ADRs — 2000 chars each (not 500)
             adr_hits = vs.search(COLLECTION_ADRS, embedding, limit=3)
             if adr_hits:
                 adr_parts = []
                 for h in adr_hits:
                     doc = h.get("document", "")[:2000]
                     adr_parts.append(f"**Related Decision (similarity: {h.get('score', 0):.2f}):**\n{doc}")
+                    provenance.append({
+                        "type": "adr", "id": h.get("id"),
+                        "title": h.get("metadata", {}).get("title", h.get("id", "")),
+                        "score": round(h.get("score", 0), 3),
+                    })
                 sections.append("## Related Existing Decisions\n\n" + "\n\n".join(adr_parts))
 
-            # Top 2 context docs — 2000 chars each
             doc_hits = vs.search(COLLECTION_CONTEXT, embedding, limit=2)
             if doc_hits:
                 doc_parts = []
                 for h in doc_hits:
                     doc = h.get("document", "")[:2000]
                     doc_parts.append(f"**Context Document:**\n{doc}")
+                    provenance.append({
+                        "type": "context_doc", "id": h.get("id"),
+                        "title": h.get("metadata", {}).get("filename", h.get("id", "")),
+                        "score": round(h.get("score", 0), 3),
+                    })
                 sections.append("## Relevant Context Documents\n\n" + "\n\n".join(doc_parts))
 
             if sections:
-                return "\n\n".join(sections) + "\n\nConsider these when making your decision. If any related decision conflicts with your recommendation, flag it in the Related Decisions section.\n"
-            return ""
+                return "\n\n".join(sections) + "\n\nConsider these when making your decision. If any related decision conflicts with your recommendation, flag it in the Related Decisions section.\n", provenance
+            return "", provenance
         except Exception:
-            return ""
+            return "", []
 
-    def generate(self, request: ADRGenerationRequest, feedback: str = "") -> GeneratedADR:
-        """Generate an ADR with RAG context. Optionally include validator feedback for retry."""
+    def generate(self, request: ADRGenerationRequest, feedback: str = "") -> tuple:
+        """Generate an ADR with RAG context. Returns (GeneratedADR, provenance_list)."""
         if not self.api_key:
             raise AIGenerationError("AI_API_KEY not configured.")
 
-        rag_context = self._retrieve_rag_context(request)
+        rag_context, provenance = self._retrieve_rag_context(request)
         prompt = self._build_prompt(request, rag_context)
 
         # Pass ADR count for sequential numbering
@@ -266,13 +275,13 @@ class ADRGenerator:
                 response_format={"type": "json_object"}
             )
             content = response.choices[0].message.content
-            return self._parse_response(content)
+            return self._parse_response(content), provenance
         except AIGenerationError:
             raise
         except Exception as e:
             raise AIGenerationError(f"AI generation failed: {str(e)}")
 
-    async def generate_async(self, request: ADRGenerationRequest, feedback: str = "") -> GeneratedADR:
+    async def generate_async(self, request: ADRGenerationRequest, feedback: str = ""):
         import asyncio
         return await asyncio.to_thread(self.generate, request, feedback)
 
