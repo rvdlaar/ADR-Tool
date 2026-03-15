@@ -728,6 +728,77 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
 }
 
 /* ================================================================
+   FOLDER SCAN
+   ================================================================ */
+
+.scan-summary {
+  padding: 1rem;
+  background: var(--bg-warm);
+  border: 1px solid var(--border-light);
+  margin-top: 0.75rem;
+}
+
+.scan-summary h4 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.scan-stats {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--mono);
+  margin-bottom: 0.75rem;
+  line-height: 1.6;
+}
+
+.scan-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.file-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 0.5rem;
+}
+
+.file-list.visible { display: flex; }
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  background: var(--surface);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.file-item:hover { background: var(--bg-warm); }
+
+.file-item input[type="checkbox"] {
+  accent-color: var(--text);
+  width: 14px;
+  height: 14px;
+}
+
+.file-item-name { flex: 1; color: var(--text); font-family: var(--mono); font-size: 0.6875rem; }
+.file-item-size { color: var(--text-tertiary); font-family: var(--mono); font-size: 0.625rem; }
+
+.scan-progress {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-style: italic;
+  padding: 0.5rem 0;
+}
+
+/* ================================================================
    ANIMATIONS
    ================================================================ */
 
@@ -802,15 +873,17 @@ body { font-family: var(--sans); background: var(--bg); color: var(--text); min-
       </div>
 
       <div class="field">
-        <label>Feed it context</label>
-        <div class="field-hint">Drop documents, paste meeting notes, or upload files to give the AI more to work with.</div>
-        <div class="dropzone" id="dropzone" ondragover="event.preventDefault();this.classList.add('over')" ondragleave="this.classList.remove('over')" ondrop="handleDrop(event)">
-          <input type="file" multiple accept=".txt,.md,.pdf,.json,.yaml,.yml,.xml,.csv" onchange="handleFiles(this.files)">
-          <div class="dropzone-label"><strong>Drop files here</strong> or click to upload</div>
-          <div class="dropzone-hint">.txt, .md, .pdf, .json, .yaml — or just paste text below</div>
+        <label>Context sources</label>
+        <div class="field-hint">Point to a folder and we'll read your docs. Or paste text directly.</div>
+        <div id="folderSetup">
+          <div class="list-add">
+            <input class="input" id="folderPath" placeholder="/path/to/your/docs or ~/projects/my-app/docs">
+            <button type="button" class="btn btn-sm" onclick="scanFolder()">Scan</button>
+          </div>
         </div>
+        <div id="folderResults" style="display:none"></div>
         <div class="ingested-files" id="ingestedFiles"></div>
-        <textarea class="textarea" id="pastedContext" placeholder="Or paste text directly — meeting notes, Slack threads, PR descriptions, existing docs..." style="min-height:60px;margin-top:0.5rem"></textarea>
+        <textarea class="textarea" id="pastedContext" placeholder="Or paste text directly — meeting notes, Slack threads, existing ADRs..." style="min-height:60px;margin-top:0.75rem"></textarea>
       </div>
 
       <div class="more-toggle" onclick="toggleMore(this, 'moreContext')">
@@ -1104,7 +1177,7 @@ async function generate(e) {
   const body = {
     title: f.title.value,
     description: f.description.value,
-    context: [f.context?.value, document.getElementById('pastedContext')?.value, ...ingestedDocs.map(d => `[${d.name}]: ${d.text}`)].filter(Boolean).join('\n\n') || undefined,
+    context: [f.context?.value, document.getElementById('pastedContext')?.value].filter(Boolean).join('\n\n') || undefined,
     profile: f.profile.value,
     requirements: tags.req.length ? tags.req : undefined,
     constraints: tags.con.length ? tags.con : undefined,
@@ -1200,35 +1273,145 @@ function md(t) {
   return s;
 }
 
-// File ingestion
-const ingestedDocs = [];
+// Folder scan + ingest
+let scannedFiles = [];
+let scannedFolder = '';
 
-function handleDrop(e) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('over');
-  if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
-}
+async function scanFolder() {
+  const path = document.getElementById('folderPath').value.trim();
+  if (!path) return;
 
-async function handleFiles(files) {
-  for (const file of files) {
-    try {
-      const text = await file.text();
-      // Ingest into RAG
-      await fetch(`${API}/../api/v1/ingest/api`, {
-        method: 'POST',
-        headers: { ...h(), 'Content-Type': 'multipart/form-data' },
-      }).catch(() => {}); // Best effort
+  const el = document.getElementById('folderResults');
+  el.style.display = 'block';
+  el.innerHTML = '<div class="scan-progress">Scanning folder...</div>';
 
-      ingestedDocs.push({ name: file.name, text: text.slice(0, 5000) });
-      renderIngested();
-    } catch {}
+  try {
+    const r = await fetch(`${API}/rag/scan`, {
+      method: 'POST', headers: h(), body: JSON.stringify({ path })
+    });
+    const d = await r.json();
+
+    if (d.error) { el.innerHTML = `<div class="scan-progress" style="color:var(--red)">${esc(d.error)}</div>`; return; }
+    if (!d.files?.length) { el.innerHTML = '<div class="scan-progress">No supported files found in this folder.</div>'; return; }
+
+    scannedFiles = d.files;
+    scannedFolder = d.folder;
+
+    const extLines = Object.entries(d.by_extension).map(([ext, n]) => `${String(n).padStart(3)} ${ext}`).join('\n');
+
+    el.innerHTML = `<div class="scan-summary">
+      <h4>Found ${d.total} files in ${esc(path)}</h4>
+      <pre class="scan-stats">${extLines}\n${(d.total_size_kb / 1024).toFixed(1)} MB total</pre>
+      <div class="scan-actions">
+        <button class="btn btn-dark btn-sm" onclick="ingestAll()">Ingest all</button>
+        <button class="btn btn-sm" onclick="showFilePicker()">Let me pick</button>
+      </div>
+      <div class="file-list" id="fileList">${d.files.map((f, i) =>
+        `<label class="file-item"><input type="checkbox" checked data-idx="${i}"><span class="file-item-name">${esc(f.path)}</span><span class="file-item-size">${(f.size / 1024).toFixed(1)}k</span></label>`
+      ).join('')}</div>
+    </div>`;
+  } catch (err) {
+    el.innerHTML = `<div class="scan-progress" style="color:var(--red)">Scan failed: ${esc(err.message)}</div>`;
   }
 }
 
-function renderIngested() {
-  document.getElementById('ingestedFiles').innerHTML = ingestedDocs.map((d, i) =>
-    `<div class="ingested-file"><span>${esc(d.name)} (${(d.text.length / 1000).toFixed(1)}k chars)</span><button onclick="ingestedDocs.splice(${i},1);renderIngested()">&times;</button></div>`
-  ).join('');
+function showFilePicker() {
+  document.getElementById('fileList')?.classList.toggle('visible');
+}
+
+async function ingestAll() {
+  const checked = document.querySelectorAll('#fileList input[type="checkbox"]:checked');
+  const files = checked.length
+    ? [...checked].map(cb => scannedFiles[cb.dataset.idx].path)
+    : scannedFiles.map(f => f.path);
+
+  await doIngest(files);
+}
+
+async function doIngest(files) {
+  const el = document.getElementById('folderResults');
+
+  // Replace scan summary with progress UI
+  el.innerHTML = `<div class="scan-summary">
+    <h4>Ingesting ${files.length} files</h4>
+    <div style="background:var(--border-light);height:4px;margin:0.75rem 0;position:relative;overflow:hidden">
+      <div id="progressBar" style="position:absolute;left:0;top:0;height:100%;width:0;background:var(--text);transition:width 0.3s var(--ease)"></div>
+    </div>
+    <div id="progressLabel" class="scan-progress">Starting...</div>
+    <div id="progressFiles" style="max-height:200px;overflow-y:auto;font-size:0.6875rem;font-family:var(--mono);margin-top:0.5rem"></div>
+  </div>`;
+
+  try {
+    const r = await fetch(`${API}/rag/ingest-files`, {
+      method: 'POST', headers: h(),
+      body: JSON.stringify({ path: scannedFolder, files })
+    });
+
+    const reader = r.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let ingested = 0;
+    const fileLog = document.getElementById('progressFiles');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const d = JSON.parse(line.slice(6));
+
+          if (d.status === 'complete') {
+            document.getElementById('progressBar').style.width = '100%';
+            document.getElementById('progressLabel').textContent = `Done — ${d.ingested} of ${d.total} files ingested`;
+            setTimeout(() => {
+              el.style.display = 'none';
+              document.getElementById('ingestedFiles').innerHTML =
+                `<div class="ingested-file"><span>${d.ingested} files indexed in knowledge base</span></div>`;
+              showSuccess(`${d.ingested} files ingested`);
+            }, 800);
+            continue;
+          }
+
+          const pct = ((d.index + 1) / d.total * 100).toFixed(0);
+          document.getElementById('progressBar').style.width = pct + '%';
+
+          const statusLabels = {
+            reading: 'Reading...',
+            embedding: 'Embedding...',
+            done: 'Done',
+            error: 'Error',
+            skipped: 'Skipped',
+          };
+
+          const statusColors = {
+            done: 'var(--green)',
+            error: 'var(--red)',
+            skipped: 'var(--text-tertiary)',
+            reading: 'var(--text-secondary)',
+            embedding: 'var(--amber)',
+          };
+
+          document.getElementById('progressLabel').textContent =
+            `${d.index + 1} of ${d.total} — ${statusLabels[d.status] || d.status} ${d.file}`;
+
+          if (d.status === 'done' || d.status === 'error' || d.status === 'skipped') {
+            const color = statusColors[d.status] || 'var(--text-secondary)';
+            const icon = d.status === 'done' ? '\u2713' : d.status === 'error' ? '\u2717' : '\u2014';
+            fileLog.innerHTML += `<div style="color:${color};padding:0.125rem 0">${icon} ${esc(d.file)}${d.error ? ` — ${esc(d.error)}` : ''}</div>`;
+            fileLog.scrollTop = fileLog.scrollHeight;
+          }
+        } catch {}
+      }
+    }
+  } catch (err) {
+    showError('Ingestion failed: ' + err.message);
+  }
 }
 
 // Accept ADR — update with edited content

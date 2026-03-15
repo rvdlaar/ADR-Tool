@@ -38,10 +38,12 @@ def init_db():
     conn.close()
 
 
-def create_document(doc_id, filename, original_filename=None, file_path=None,
+def create_document(doc_id=None, filename="", original_filename=None, file_path=None,
                     file_size=0, content_type=None, file_hash=None,
                     metadata=None, source="api"):
     conn = _get_conn()
+    if not doc_id:
+        doc_id = str(uuid.uuid4())[:12]
     conn.execute(
         """INSERT INTO documents (id, filename, original_filename, file_path,
            file_size, content_type, file_hash, metadata, source)
