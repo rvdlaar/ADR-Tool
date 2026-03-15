@@ -136,11 +136,13 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 from app.api import auth, adrs, ai_generate
 from app.api.rag import router as rag_router
+from app.api.settings import router as settings_router
 
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(adrs.router, prefix="/api/v1")
 app.include_router(ai_generate.router, prefix="/api/v1")
 app.include_router(rag_router, prefix="/api/v1")
+app.include_router(settings_router, prefix="/api/v1")
 
 
 # =============================================================================

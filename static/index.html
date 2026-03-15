@@ -135,6 +135,7 @@ html{font-size:16px;-webkit-font-smoothing:antialiased}body{font-family:var(--sa
     <div class="bar-link" onclick="go('create')">New</div>
     <div class="bar-link" onclick="go('search')">Search</div>
     <div class="bar-link" onclick="go('kb')">Knowledge</div>
+    <div class="bar-link" onclick="go('settings')">Settings</div>
   </nav>
   <div class="bar-right">
     <span class="bar-kb" id="kbBadge" onclick="go('kb')" style="display:none"></span>
@@ -214,6 +215,31 @@ html{font-size:16px;-webkit-font-smoothing:antialiased}body{font-family:var(--sa
   <div style="margin-top:2rem" id="kbDocs"></div>
 </div>
 
+<!-- SETTINGS -->
+<div class="view" id="v-settings">
+  <h2 style="font-family:var(--serif);font-size:1.375rem;font-weight:400;margin-bottom:1.5rem">Settings</h2>
+  <div class="f"><label>AI API Key</label><div class="f-hint">OpenAI, OpenRouter, or any compatible provider.</div><input class="inp" id="setKey" type="password" placeholder="sk-..."></div>
+  <div class="f"><label>Model</label><input class="inp" id="setModel" placeholder="gpt-4o-mini"></div>
+  <div class="f"><label>Base URL (optional)</label><div class="f-hint">For OpenRouter, Ollama, or self-hosted. Leave empty for OpenAI.</div><input class="inp" id="setBase" placeholder="https://openrouter.ai/api/v1"></div>
+  <hr style="border:none;border-top:1px solid var(--border-l);margin:1.5rem 0">
+  <div class="f"><label>Output folder</label><div class="f-hint">Accepted ADRs auto-save here as .md files. Local folder, network drive, or synced folder (OneDrive, Dropbox, SharePoint).</div><input class="inp" id="setFolder" placeholder="/path/to/adr-output or ~/Documents/ADRs"></div>
+  <div class="f-actions"><button class="btn btn-p" onclick="saveSets()">Save settings</button></div>
+  <div id="setStatus" style="margin-top:.75rem"></div>
+</div>
+
+</div>
+
+<!-- ONBOARDING — first launch if no API key -->
+<div class="gen" id="onboard" style="display:none;backdrop-filter:blur(6px)">
+  <div style="background:var(--surface);padding:2rem;max-width:440px;width:90%;border:1px solid var(--border)">
+    <h2 style="font-family:var(--serif);font-size:1.25rem;font-weight:600;margin-bottom:.375rem">Welcome to ADR</h2>
+    <p style="font-size:.8125rem;color:var(--t2);line-height:1.6;margin-bottom:1.25rem">Architecture Decision Records capture the <em>why</em> behind technical choices. To generate ADRs with AI, connect your provider.</p>
+    <div class="f"><label>API Key</label><input class="inp" id="obKey" placeholder="sk-... (OpenAI, OpenRouter, or compatible)"></div>
+    <div class="f"><label>Model</label><input class="inp" id="obModel" value="gpt-4o-mini"></div>
+    <div class="f"><label>Base URL (optional)</label><input class="inp" id="obBase" placeholder="Leave empty for OpenAI"></div>
+    <div class="f"><label>Output folder (optional)</label><div class="f-hint">Where accepted ADRs are saved. Network drive, synced folder, or local path.</div><input class="inp" id="obFolder" placeholder="~/Documents/ADRs"></div>
+    <div style="display:flex;gap:.5rem;margin-top:1rem"><button class="btn btn-p" onclick="completeOnboard()">Get started</button><button class="btn" onclick="skipOnboard()">Skip</button></div>
+  </div>
 </div>
 
 <!-- Generating -->
@@ -232,11 +258,11 @@ async function auth(){try{const r=await fetch(`${API}/auth/token`,{method:'POST'
 const H=()=>{const o={'Content-Type':'application/json'};if(tk)o['Authorization']=`Bearer ${tk}`;return o};
 
 // Nav
-function go(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('on'));document.getElementById('v-'+v)?.classList.add('on');document.querySelectorAll('.bar-link').forEach(e=>e.classList.remove('on'));const m={list:0,create:1,search:2,kb:3};if(m[v]!==undefined)document.querySelectorAll('.bar-link')[m[v]]?.classList.add('on');if(v==='list')loadL();if(v==='search')document.getElementById('sQ')?.focus();if(v==='kb')loadKB();if(v==='create'){document.querySelector('[name=title]')?.focus();populateSupersede()}}
+function go(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('on'));document.getElementById('v-'+v)?.classList.add('on');document.querySelectorAll('.bar-link').forEach(e=>e.classList.remove('on'));const m={list:0,create:1,search:2,kb:3,settings:4};if(m[v]!==undefined)document.querySelectorAll('.bar-link')[m[v]]?.classList.add('on');if(v==='list')loadL();if(v==='search')document.getElementById('sQ')?.focus();if(v==='kb')loadKB();if(v==='settings')loadSets();if(v==='create'){document.querySelector('[name=title]')?.focus();populateSupersede()}}
 
 // List
 async function loadL(){try{const r=await fetch(`${API}/adrs?page_size=50`,{headers:H()});const d=await r.json();adrs=d.items||[];renderL(adrs);const s=await fetch(`${API}/adrs/stats/summary`,{headers:H()}).then(r=>r.json());document.getElementById('stats').textContent=`${s.total||0} decisions`}catch{renderL([])}}
-function renderL(ls){const el=document.getElementById('ls');if(!ls.length){el.innerHTML='<div class="empty"><h3>No decisions yet</h3><p>Architecture Decision Records capture the <em>why</em> behind technical choices. Start with a title and brief context — the AI handles the rest.</p><button class="btn btn-p" onclick="go(\'create\')">Record your first decision</button></div>';return}
+function renderL(ls){const el=document.getElementById('ls');if(!ls.length){el.innerHTML=`<div class="empty"><h3>No decisions yet</h3><p>Architecture Decision Records capture the <em>why</em> behind technical choices. Start with a title and brief context — the AI handles the rest.</p><button class="btn btn-p" onclick="go('create')">Record your first decision</button></div><div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--border-l)"><div style="font-size:.6875rem;color:var(--t3);text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:.75rem">Example ADR</div><div class="entry" style="cursor:default;opacity:.7"><span class="entry-n">1.</span><div><div class="entry-t">Use PostgreSQL for primary database</div><div class="entry-y">In the context of needing ACID-compliant persistent storage, facing 10M+ row growth projections, we decided on PostgreSQL to achieve query flexibility and ecosystem maturity, accepting operational complexity over simpler alternatives.</div></div><span class="entry-s s-accepted">Accepted</span></div></div>`;return}
 el.innerHTML=ls.map((a,i)=>{const n=a.title?.match(/^(\d+)\./)?.[1]||(i+1);const t=a.title?.replace(/^\d+\.\s*/,'')||a.title;const sc=(a.status||'Proposed').toLowerCase();const days=a.created_at?Math.floor((Date.now()-new Date(a.created_at).getTime())/86400000):0;
 const stale=days>90&&sc!=='superseded'&&sc!=='deprecated';
 return`<div class="entry" onclick="det('${a.id}')"><span class="entry-n">${n}.</span><div><div class="entry-t">${esc(t)}${stale?`<span style="font-size:.5625rem;color:var(--amber);margin-left:.375rem">${days}d</span>`:''}</div>${a.y_statement?`<div class="entry-y">${esc(a.y_statement)}</div>`:''}</div><span class="entry-s s-${sc}">${a.status||'Proposed'}</span></div>`}).join('')}
@@ -300,7 +326,9 @@ async function saveEdits(){
 async function saveADR(status){
   if(!curADR)return;
   const edits={};document.querySelectorAll('.sec-b[contenteditable]').forEach(el=>{const k=el.dataset.key;if(k)edits[k]=el.innerText});
-  try{await fetch(`${API}/adrs/${curADR.id}`,{method:'PUT',headers:H(),body:JSON.stringify({title:curADR.title,context:edits.context||curADR.context,decision:edits.decision||curADR.decision,consequences:edits.consequences||curADR.consequences,status})});toast(status==='Accepted'?'ADR accepted':'Draft saved','ok');go('list')}catch(e){toast(e.message,'err')}
+  try{await fetch(`${API}/adrs/${curADR.id}`,{method:'PUT',headers:H(),body:JSON.stringify({title:curADR.title,context:edits.context||curADR.context,decision:edits.decision||curADR.decision,consequences:edits.consequences||curADR.consequences,status})});
+  if(status==='Accepted')await autoSaveToFolder(curADR);
+  toast(status==='Accepted'?'ADR accepted and saved':'Draft saved','ok');go('list')}catch(e){toast(e.message,'err')}
 }
 
 function regenADR(){
@@ -482,10 +510,57 @@ function downloadMD(){
 }
 function toast(msg,type){const el=document.createElement('div');el.className=`toast toast-${type}`;el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),3000)}
 
+// Settings
+async function loadSets(){
+  try{const r=await fetch(`${API}/settings`,{headers:H()});const d=await r.json();
+  document.getElementById('setKey').value='';document.getElementById('setKey').placeholder=d.ai_configured?'Configured (hidden)':'Not set';
+  document.getElementById('setModel').value=d.ai_model||'';
+  document.getElementById('setBase').value=d.ai_base_url||'';
+  document.getElementById('setFolder').value=d.output_folder||'';
+  }catch{}}
+
+async function saveSets(){
+  const body={};
+  const key=document.getElementById('setKey').value.trim();if(key)body.ai_api_key=key;
+  const model=document.getElementById('setModel').value.trim();if(model)body.ai_model=model;
+  const base=document.getElementById('setBase').value.trim();if(base)body.ai_base_url=base;
+  const folder=document.getElementById('setFolder').value.trim();if(folder)body.output_folder=folder;
+  try{await fetch(`${API}/settings`,{method:'PUT',headers:H(),body:JSON.stringify(body)});
+  document.getElementById('setStatus').innerHTML='<span style="color:var(--green);font-size:.8125rem">Settings saved</span>';
+  toast('Settings saved','ok')}catch(e){toast(e.message,'err')}}
+
+// Onboarding
+async function checkOnboard(){
+  try{const r=await fetch(`${API}/settings`,{headers:H()});const d=await r.json();
+  if(!d.ai_configured)document.getElementById('onboard').style.display='flex'}catch{}}
+
+async function completeOnboard(){
+  const body={};
+  const key=document.getElementById('obKey').value.trim();if(key)body.ai_api_key=key;
+  const model=document.getElementById('obModel').value.trim();if(model)body.ai_model=model;
+  const base=document.getElementById('obBase').value.trim();if(base)body.ai_base_url=base;
+  const folder=document.getElementById('obFolder').value.trim();if(folder)body.output_folder=folder;
+  if(Object.keys(body).length){try{await fetch(`${API}/settings`,{method:'PUT',headers:H(),body:JSON.stringify(body)})}catch{}}
+  document.getElementById('onboard').style.display='none';
+  toast('Ready to create your first ADR','ok')}
+
+function skipOnboard(){document.getElementById('onboard').style.display='none'}
+
+// Auto-save to output folder on accept
+async function autoSaveToFolder(adr){
+  try{const r=await fetch(`${API}/settings`,{headers:H()});const d=await r.json();
+  if(!d.output_folder)return;
+  const mdContent=toMarkdown(adr);
+  const num=adr.title?.match(/^(\d+)\./)?.[1]||'000';
+  const slug=(adr.title||'').replace(/^\d+\.\s*/,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,50);
+  const filename=`adr-${num.padStart(3,'0')}-${slug}.md`;
+  await fetch(`${API}/settings/save-adr-to-folder`,{method:'POST',headers:H(),body:JSON.stringify({filename,content:mdContent})});
+  }catch{/* non-blocking */}}
+
 // Keys
 document.addEventListener('keydown',e=>{if(e.metaKey&&e.key==='k'){e.preventDefault();go('search')}if(e.metaKey&&e.key==='n'){e.preventDefault();go('create')}if(e.key==='Escape'){if(document.getElementById('genO').classList.contains('on'))cancelGen();else go('list')}});
 
-(async()=>{await auth();loadL();loadKB()})();
+(async()=>{await auth();loadL();loadKB();checkOnboard()})();
 </script>
 </body>
 </html>
