@@ -1,154 +1,185 @@
 """
-AI-powered ADR generation endpoints.
+AI-powered ADR generation endpoints with validation, conflict detection, and review flow.
 """
-import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from app.core.security import User, require_scopes
-from app.models.adr import ADR, ADRStatus
-from app.schemas.adr import ADRGenerateRequest, ADRGenerateResponse
+from app.db.adr_store import create_adr as db_create, get_adr as db_get
 from app.services.ai_generator import (
-    ADRGenerator,
     ADRGenerationRequest,
     AIGenerationError,
     get_generator,
 )
+from app.services.adr_validator import validate_adr, llm_validate_adr, ADRValidationResult
+from app.services.conflict_detector import detect_conflicts
 
 router = APIRouter(prefix="/adrs", tags=["AI ADR Generation"])
 
 
-@router.post("/generate", response_model=ADRGenerateResponse, status_code=status.HTTP_201_CREATED)
+class GenerateResponse(BaseModel):
+    generated: bool
+    adr: dict
+    validation: Optional[dict] = None
+    conflicts: list = []
+    conflict_warning: Optional[str] = None
+    rag_context_used: bool = False
+    related_adrs: list = []
+    model_used: str = ""
+    profile: str = "detailed"
+    review_required: bool = True
+    message: str = ""
+
+
+@router.post("/generate", response_model=GenerateResponse, status_code=status.HTTP_201_CREATED)
 async def generate_adr(
-    request: ADRGenerateRequest,
+    request: ADRGenerationRequest,
     user: User = Depends(require_scopes(["adr:write"]))
 ):
     """
-    Generate an ADR using AI.
-    
-    Provide a title and description, and the AI will generate a complete
-    Architecture Decision Record with context, decision, and consequences.
-    
-    Requires adr:write scope.
+    Generate an ADR with RAG context, quality validation, and conflict detection.
+    Returns the ADR with validation score, conflicts, and review flag.
     """
     try:
         generator = get_generator()
-        
-        # Build the generation request
-        ai_request = ADRGenerationRequest(
-            title=request.title,
-            description=request.description,
-            context=request.context,
-            requirements=request.requirements,
-            constraints=request.constraints,
-            alternatives=request.alternatives,
-        )
-        
-        # Generate the ADR
-        generated = await generator.generate_async(ai_request)
-        
-        # Create full ADR in the database
-        adr_id = str(uuid.uuid4())[:8]
-        
-        adr = ADR(
-            id=adr_id,
+
+        # 1. Generate ADR
+        generated = await generator.generate_async(request)
+
+        # 2. Layer 1: Free heuristic validation
+        validation = validate_adr(generated, constraints=request.constraints)
+
+        # 3. Layer 2: If Layer 1 flags issues, use cheap LLM scoring
+        if not validation.passed:
+            llm_result = llm_validate_adr(generated, generator)
+            # Merge results
+            validation.llm_validated = True
+            validation.score = llm_result.score
+            validation.passed = llm_result.passed
+            validation.suggestions.extend(llm_result.suggestions)
+
+            # 4. Auto-retry if score < 7 (max 1 retry)
+            if not validation.passed:
+                feedback = "Issues found:\n" + "\n".join(validation.issues + validation.suggestions)
+                generated = await generator.generate_async(request, feedback=feedback)
+                validation = validate_adr(generated, constraints=request.constraints)
+                validation.retried = True
+
+        # 5. Conflict detection (free heuristic + optional cheap LLM)
+        conflicts = detect_conflicts(generated)
+        conflict_warning = None
+        if conflicts:
+            conflict_warning = f"⚠ {len(conflicts)} potential conflict(s) with existing ADRs: " + \
+                "; ".join(c.get("reason", "") for c in conflicts[:3])
+            generated.conflicts = conflicts
+            generated.conflict_warning = conflict_warning
+
+        # 6. Store in SQLite
+        adr = db_create(
             title=generated.title,
             context=generated.context,
             decision=generated.decision,
             consequences=generated.consequences,
             author=user.username,
             tags=generated.tags,
-            status=ADRStatus.PROPOSED,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
             ai_generated=True,
             ai_model=generator.model,
         )
-        
-        # Store in the database (in-memory for now)
-        from app.api.adrs import _adrs_db
-        _adrs_db[adr_id] = adr
-        
-        return ADRGenerateResponse(
+
+        # 7. Index in ChromaDB
+        _index_adr(adr)
+
+        # 8. Build full ADR content for response (all sections)
+        full_adr = dict(adr)
+        full_adr["y_statement"] = generated.y_statement
+        full_adr["decision_drivers"] = generated.decision_drivers
+        full_adr["alternatives_considered"] = generated.alternatives_considered
+        full_adr["impact"] = generated.impact
+        full_adr["reversibility"] = generated.reversibility
+        full_adr["related_decisions"] = generated.related_decisions
+
+        return GenerateResponse(
             generated=True,
-            adr=adr.model_dump(),
+            adr=full_adr,
+            validation=validation.model_dump(),
+            conflicts=conflicts,
+            conflict_warning=conflict_warning,
+            rag_context_used=True,  # RAG is always attempted
             model_used=generator.model,
-            message="ADR generated successfully"
+            profile=request.profile,
+            review_required=True,
+            message="ADR generated. Review required before accepting."
         )
-        
+
     except AIGenerationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate ADR: {str(e)}"
-        )
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Generation failed: {str(e)}")
 
 
-@router.post("/generate/draft", response_model=ADRGenerateResponse)
+@router.post("/generate/draft", response_model=GenerateResponse)
 async def generate_adr_draft(
-    request: ADRGenerateRequest,
+    request: ADRGenerationRequest,
     user: User = Depends(require_scopes(["adr:read", "adr:write"]))
 ):
-    """
-    Generate an ADR draft without saving to database.
-    
-    Returns the generated ADR content for review before saving.
-    Useful for previewing the AI output before creating the ADR.
-    
-    Requires adr:read and adr:write scopes.
-    """
+    """Generate an ADR draft without saving. For preview before committing."""
     try:
         generator = get_generator()
-        
-        ai_request = ADRGenerationRequest(
-            title=request.title,
-            description=request.description,
-            context=request.context,
-            requirements=request.requirements,
-            constraints=request.constraints,
-            alternatives=request.alternatives,
-        )
-        
-        generated = await generator.generate_async(ai_request)
-        
-        # Create draft ADR (not saved to DB)
-        adr_id = f"draft-{uuid.uuid4().hex[:8]}"
-        
-        adr = ADR(
-            id=adr_id,
-            title=generated.title,
-            context=generated.context,
-            decision=generated.decision,
-            consequences=generated.consequences,
-            author=user.username,
-            tags=generated.tags,
-            status=ADRStatus.PROPOSED,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-            ai_generated=True,
-            ai_model=generator.model,
-        )
-        
-        return ADRGenerateResponse(
+        generated = await generator.generate_async(request)
+        validation = validate_adr(generated, constraints=request.constraints)
+        conflicts = detect_conflicts(generated)
+
+        full_adr = {
+            "id": f"draft-{datetime.utcnow().strftime('%H%M%S')}",
+            "title": generated.title,
+            "y_statement": generated.y_statement,
+            "context": generated.context,
+            "decision_drivers": generated.decision_drivers,
+            "decision": generated.decision,
+            "alternatives_considered": generated.alternatives_considered,
+            "consequences": generated.consequences,
+            "impact": generated.impact,
+            "reversibility": generated.reversibility,
+            "related_decisions": generated.related_decisions,
+            "status": "Proposed",
+            "tags": generated.tags,
+            "author": user.username,
+            "ai_generated": True,
+            "ai_model": generator.model,
+        }
+
+        return GenerateResponse(
             generated=True,
-            adr=adr.model_dump(),
+            adr=full_adr,
+            validation=validation.model_dump(),
+            conflicts=conflicts,
+            conflict_warning=f"⚠ {len(conflicts)} conflict(s)" if conflicts else None,
             model_used=generator.model,
-            message="Draft ADR generated. POST to /adrs to save."
+            profile=request.profile,
+            review_required=True,
+            message="Draft generated. POST to /adrs to save."
         )
-        
+
     except AIGenerationError as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate draft: {str(e)}"
-        )
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+def _index_adr(adr: dict):
+    """Best-effort index ADR in ChromaDB."""
+    try:
+        from app.services.embeddings import get_embedding_service
+        from app.services.vector_store import get_vector_store, COLLECTION_ADRS
+        vs = get_vector_store()
+        if not vs:
+            return
+        text = f"{adr['title']}\n{adr.get('context', '')}\n{adr.get('decision', '')}"
+        embedding = get_embedding_service().embed(text)
+        vs.upsert(COLLECTION_ADRS, adr["id"], embedding, text, {
+            "title": adr["title"],
+            "status": adr.get("status", "Proposed"),
+        })
+    except Exception:
+        pass
