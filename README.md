@@ -1,6 +1,6 @@
 # ADR Tool
 
-AI-powered Architecture Decision Record generator with RAG, quality validation, and conflict detection.
+AI-powered Architecture Decision Record generator with RAG, quality validation, conflict detection, and export to any folder.
 
 ## What It Does
 
@@ -9,8 +9,9 @@ Give it a title and context, and it generates a comprehensive ADR with:
 - **Alternatives comparison table** (not just pros/cons — why each was rejected)
 - **Impact table** (which roles are affected, how, what they need to do)
 - **Reversibility analysis** (can you undo this? at what cost?)
-- **Quality validation** (score 1-10, auto-retries if below threshold)
+- **Quality validation** (score 1-10, auto-retries if below threshold, section-level highlighting)
 - **Conflict detection** (warns if the decision contradicts existing ADRs)
+- **RAG provenance** (shows which documents informed the generation)
 
 Feed it your existing docs (point to a folder) and it becomes context-aware — new ADRs are consistent with prior decisions.
 
@@ -20,30 +21,65 @@ Feed it your existing docs (point to a folder) and it becomes context-aware — 
 git clone https://github.com/rvdlaar/ADR-Tool.git
 cd ADR-Tool
 
-cp .env.example .env
-# Set AI_API_KEY in .env
-
 docker compose up -d
 # Open http://localhost:8000
 ```
 
 Two services start: the ADR API (port 8000) and ChromaDB for vector search (port 8002).
 
+**First launch:** An onboarding wizard asks for your AI API key — no `.env` editing required.
+
 ## Using the Frontend
 
-1. Open `http://localhost:8000` — the web UI loads
-2. Click **New** — enter a title and description
-3. Optionally: paste a folder path → **Scan** → **Ingest all** (indexes your docs for RAG)
-4. Optionally: expand constraints, alternatives, impact sections
-5. Click **Generate ADR**
-6. Review the result — edit any section inline
-7. Click **Accept this ADR** or **Regenerate**
+1. **First launch** → onboarding wizard: enter API key, model, output folder
+2. **New** → enter title + description → **Generate ADR**
+3. **Review** → edit any section inline → validation score shows quality
+4. **Accept** → ADR saved + auto-exported to your output folder as `.md`
+5. **Export** → Copy as Markdown or Download `.md` from any ADR
+6. **Knowledge** → scan a folder, ingest docs for RAG context, or import existing ADRs
+7. **Settings** → change API key, model, output folder without restart
 
-Keyboard shortcuts: `Cmd+N` (new), `Cmd+K` (search), `Esc` (back)
+Keyboard: `Cmd+N` (new), `Cmd+K` (search), `Esc` (back)
+
+## Key Features
+
+### Generation
+- Hybrid ADR format: Nygard + Y-statement + Impact table
+- Two profiles: `detailed` (metric-driven) and `guided` (with explanations)
+- RAG-augmented: retrieves related ADRs + context docs before generating
+- Auto-retry if quality score < 7
+
+### Quality
+- Layer 1: free heuristic checks (structure, vague terms, constraints)
+- Layer 2: LLM scoring (only when Layer 1 flags issues — cost-rightized)
+- Section-level highlights: weak sections marked with amber indicator
+- Staleness detection: ADRs > 90 days flagged for review
+
+### Export & Import
+- **Copy as Markdown** — one click to clipboard
+- **Download .md** — numbered file (adr-001-title.md)
+- **Bulk export** — all ADRs as one download
+- **Auto-save** — accepted ADRs written to configurable output folder (local, network drive, OneDrive, SharePoint)
+- **Import** — parse existing ADR `.md` files into the registry + RAG index
+
+### Decision Registry
+- Supersession chains: mark which ADR replaces which
+- Cross-linking: ADR references (ADR-1, ADR-3) become clickable links
+- Conflict detection: heuristic + LLM check against existing decisions
+- Semantic search with section matching ("matched in Decision" vs "matched in Alternatives")
+
+### Knowledge Base
+- Scan any folder for `.md`, `.txt`, `.json`, `.yaml` files
+- Select all or pick specific files
+- Real-time SSE progress during ingestion
+- Documents indexed in ChromaDB for RAG context
+
+### Settings (no `.env` required)
+- API key, model, base URL — configurable from UI
+- Output folder — local path, network drive, or synced folder
+- Settings persist in `data/settings.json`, applied on startup
 
 ## ADR Format
-
-Hybrid format combining Nygard, Y-statements, and Impact analysis:
 
 | Section | Purpose |
 |---------|---------|
@@ -67,6 +103,7 @@ Hybrid format combining Nygard, Y-statements, and Impact analysis:
 | `GET` | `/api/v1/adrs/{id}` | Get single ADR |
 | `POST` | `/api/v1/adrs` | Create ADR manually |
 | `PUT` | `/api/v1/adrs/{id}` | Update ADR |
+| `PATCH` | `/api/v1/adrs/{id}/status` | Change status |
 | `DELETE` | `/api/v1/adrs/{id}` | Delete ADR |
 | `GET` | `/api/v1/adrs/{id}/similar` | Find similar ADRs (semantic) |
 
@@ -74,21 +111,28 @@ Hybrid format combining Nygard, Y-statements, and Impact analysis:
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/api/v1/adrs/generate` | Generate + save ADR with RAG + validation |
+| `POST` | `/api/v1/adrs/generate` | Generate + save with RAG + validation + conflicts |
 | `POST` | `/api/v1/adrs/generate/draft` | Generate draft (no save) |
 
-Generation request accepts: `title`, `description`, `context`, `requirements`, `constraints`, `alternatives`, `decision_drivers`, `impacted_roles`, `success_criteria`, `timeline`, `scope`, `profile` ("detailed" or "guided").
-
-Response includes: `adr`, `validation` (score, issues, suggestions), `conflicts` (detected contradictions), `review_required`.
+Response includes: `adr`, `validation` (score, issues, suggestions), `conflicts`, `related_adrs` (provenance), `review_required`.
 
 ### RAG / Knowledge Base
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/v1/rag/search?q=...` | Semantic search across ADRs + docs |
+| `GET` | `/api/v1/rag/search?q=...` | Semantic search |
 | `GET` | `/api/v1/rag/stats` | Index statistics |
-| `POST` | `/api/v1/rag/scan` | Scan a folder for ingestible files |
-| `POST` | `/api/v1/rag/ingest-files` | Ingest selected files (SSE progress) |
+| `POST` | `/api/v1/rag/scan` | Scan folder for files |
+| `POST` | `/api/v1/rag/ingest-files` | Ingest files (SSE progress) |
+| `POST` | `/api/v1/rag/import-adrs` | Import .md files as ADRs |
+
+### Settings
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/v1/settings` | Get settings (key masked) |
+| `PUT` | `/api/v1/settings` | Update settings |
+| `POST` | `/api/v1/settings/save-adr-to-folder` | Save .md to output folder |
 
 ### Authentication
 
@@ -104,9 +148,10 @@ Response includes: `adr`, `validation` (score, issues, suggestions), `conflicts`
 ADR Tool
 ├── FastAPI (API + static frontend)
 ├── SQLite (persistent storage, WAL mode)
-│   ├── adrs table (all sections persisted)
+│   ├── adrs table (all 10 sections persisted)
 │   ├── documents table (ingested doc metadata)
-│   └── users table (auth)
+│   ├── users table (auth)
+│   └── settings.json (API key, output folder)
 ├── ChromaDB (vector store)
 │   ├── adrs collection (embedded ADR text)
 │   └── context_docs collection (embedded ingested docs)
@@ -120,28 +165,10 @@ ADR Tool
 
 ```
 Generate → Layer 1 (free heuristics) → Issues? → Layer 2 (LLM scoring)
-→ Score < 7? → Retry once with feedback → Return with score + suggestions
-→ Conflict detection (heuristic + optional LLM) → Architect reviews
+→ Score < 7? → Retry once with feedback → Conflict detection → Architect reviews
 ```
 
-Cost per ADR: ~$0.01 happy path, ~$0.024 worst case (retry + conflict check).
-
-## Configuration
-
-```bash
-# Required
-AI_API_KEY=sk-...              # OpenAI, OpenRouter, or compatible
-
-# Optional
-AI_PROVIDER=openai             # openai, openrouter, ollama
-AI_MODEL=gpt-4o-mini           # Generation model
-AI_BASE_URL=                   # For alternative providers
-EMBEDDING_MODEL=text-embedding-3-small
-CHROMA_URL=http://chromadb:8000
-SECRET_KEY=change-me           # JWT signing key
-ENVIRONMENT=development        # development or production
-RATE_LIMIT_PER_MINUTE=60
-```
+Cost per ADR: ~$0.01 happy path, ~$0.024 worst case.
 
 ## Project Structure
 
@@ -149,45 +176,32 @@ RATE_LIMIT_PER_MINUTE=60
 ├── app/
 │   ├── api/
 │   │   ├── auth.py              # OAuth2/JWT authentication
-│   │   ├── adrs.py              # ADR CRUD + similar search
-│   │   ├── ai_generate.py       # Generation with validation + conflicts
+│   │   ├── adrs.py              # ADR CRUD + similar + cross-linking
+│   │   ├── ai_generate.py       # Generation + validation + conflicts + provenance
 │   │   ├── ingest.py            # File upload endpoints
-│   │   └── rag.py               # Search, scan, folder ingest (SSE)
-│   ├── core/
-│   │   ├── config.py            # Settings
-│   │   ├── cors.py              # CORS + security headers
-│   │   ├── security.py          # JWT, API keys, RBAC
-│   │   └── user_store.py        # SQLite user persistence
-│   ├── db/
-│   │   ├── adr_store.py         # ADR SQLite CRUD
-│   │   └── document_store.py    # Document metadata SQLite
-│   ├── models/
-│   │   └── adr.py               # Pydantic models
-│   ├── schemas/
-│   │   └── adr.py               # Request/response schemas
-│   ├── services/
-│   │   ├── ai_generator.py      # LLM generation + RAG context
-│   │   ├── adr_validator.py     # Quality validation (heuristic + LLM)
-│   │   ├── conflict_detector.py # Conflict detection (heuristic + LLM)
-│   │   ├── embeddings.py        # Embedding service
-│   │   ├── ingest.py            # File ingestion service
-│   │   └── vector_store.py      # ChromaDB wrapper
-│   └── main.py                  # FastAPI app + static files
-├── static/
-│   └── index.html               # Frontend SPA
+│   │   ├── rag.py               # Search, scan, ingest (SSE), import ADRs
+│   │   └── settings.py          # API key, model, output folder
+│   ├── core/                    # Security, config, CORS
+│   ├── db/                      # SQLite persistence (ADRs + documents)
+│   ├── services/                # AI generator, validator, conflict detector, embeddings, vector store
+│   └── main.py                  # FastAPI app
+├── static/index.html            # Frontend SPA
 ├── docker-compose.yml           # API + ChromaDB
-├── Dockerfile                   # Python 3.11 image
-└── requirements.txt             # Dependencies
+├── Dockerfile                   # Python 3.11
+└── data/                        # Persistent (volume-mounted)
+    ├── adrs.db                  # SQLite database
+    ├── users.db                 # User auth database
+    └── settings.json            # UI-configured settings
 ```
 
 ## Security
 
 - OAuth2/JWT with scoped access (adr:read, adr:write, adr:delete, admin:*)
 - API key authentication for server-to-server
-- Strict CORS, security headers (CSP, HSTS, X-Frame-Options)
+- Strict CORS, security headers (CSP, X-Frame-Options)
 - Rate limiting (configurable per minute)
-- Path traversal protection on file ingestion
-- Folder scan restricted to safe extensions, skips hidden dirs
+- Path traversal protection on all file operations
+- API key masked in settings GET response
 
 See [SECURITY.md](SECURITY.md) for details.
 
