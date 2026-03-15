@@ -1,4 +1,4 @@
-"""ChromaDB vector store wrapper."""
+"""ChromaDB vector store wrapper with self-healing reconnection."""
 import os
 import logging
 
@@ -56,26 +56,54 @@ class VectorStore:
         try:
             coll = self._get_collection(collection_name)
             coll.delete(ids=[doc_id])
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"ChromaDB delete failed for {doc_id}: {e}")
 
     def count(self, collection_name):
         try:
             coll = self._get_collection(collection_name)
             return coll.count()
+        except Exception as e:
+            logger.warning(f"ChromaDB count failed for {collection_name}: {e}")
+            return -1  # -1 signals error, 0 means genuinely empty
+
+    def is_healthy(self) -> bool:
+        try:
+            self.client.heartbeat()
+            return True
         except Exception:
-            return 0
+            return False
 
 
 _store = None
+_last_failure = 0
 
 
 def get_vector_store():
-    global _store
-    if _store is None:
-        try:
-            _store = VectorStore()
-        except Exception as e:
-            logger.warning(f"ChromaDB unavailable: {e}")
-            return None
-    return _store
+    """Get vector store with self-healing: retries connection if previously failed."""
+    global _store, _last_failure
+    import time
+
+    if _store is not None:
+        return _store
+
+    # Don't retry more than once every 30 seconds
+    now = time.time()
+    if _last_failure and (now - _last_failure) < 30:
+        return None
+
+    try:
+        _store = VectorStore()
+        _last_failure = 0
+        return _store
+    except Exception as e:
+        logger.warning(f"ChromaDB unavailable: {e}")
+        _last_failure = now
+        return None
+
+
+def reset_vector_store():
+    """Force reconnection on next request."""
+    global _store, _last_failure
+    _store = None
+    _last_failure = 0

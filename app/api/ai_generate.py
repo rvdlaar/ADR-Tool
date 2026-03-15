@@ -32,6 +32,7 @@ class GenerateResponse(BaseModel):
     profile: str = "detailed"
     review_required: bool = True
     message: str = ""
+    warnings: list = []  # Non-blocking issues the user should know about
 
 
 @router.post("/generate", response_model=GenerateResponse, status_code=status.HTTP_201_CREATED)
@@ -45,6 +46,7 @@ async def generate_adr(
     """
     try:
         generator = get_generator()
+        warnings = []
 
         # 1. Generate ADR
         generated, provenance = await generator.generate_async(request)
@@ -95,9 +97,11 @@ async def generate_adr(
         )
 
         # 7. Index in ChromaDB
-        _index_adr(adr)
+        idx_ok = _index_adr(adr)
+        if not idx_ok:
+            warnings.append("ADR saved but not indexed in search — ChromaDB may be unavailable")
 
-        # 8. Response uses the persisted ADR (all fields now in SQLite)
+        # 8. Response
         full_adr = dict(adr)
 
         return GenerateResponse(
@@ -111,13 +115,24 @@ async def generate_adr(
             model_used=generator.model,
             profile=request.profile,
             review_required=True,
+            warnings=warnings,
             message="ADR generated. Review required before accepting."
         )
 
     except AIGenerationError as e:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+        # Human-readable AI errors
+        msg = str(e)
+        if "API_KEY" in msg.upper() or "api_key" in msg:
+            msg = "AI API key is not configured or invalid. Go to Settings to set your API key."
+        elif "rate" in msg.lower() and "limit" in msg.lower():
+            msg = "AI provider rate limit reached. Wait a moment and try again."
+        elif "model" in msg.lower() and ("not found" in msg.lower() or "does not exist" in msg.lower()):
+            msg = f"The configured AI model is not available. Check your model name in Settings."
+        elif "connect" in msg.lower() or "timeout" in msg.lower():
+            msg = "Could not reach the AI provider. Check your network connection and API base URL in Settings."
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=msg)
     except Exception as e:
-        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Generation failed: {str(e)}")
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Something went wrong: {str(e)}")
 
 
 @router.post("/generate/draft", response_model=GenerateResponse)
@@ -167,19 +182,24 @@ async def generate_adr_draft(
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
 
-def _index_adr(adr: dict):
-    """Best-effort index ADR in ChromaDB."""
+def _index_adr(adr: dict) -> bool:
+    """Index ADR in ChromaDB. Returns True on success, False on failure."""
+    import logging
+    logger = logging.getLogger(__name__)
     try:
         from app.services.embeddings import get_embedding_service
         from app.services.vector_store import get_vector_store, COLLECTION_ADRS
         vs = get_vector_store()
         if not vs:
-            return
+            logger.warning(f"ChromaDB unavailable — ADR {adr['id']} not indexed")
+            return False
         text = f"{adr['title']}\n{adr.get('context', '')}\n{adr.get('decision', '')}"
         embedding = get_embedding_service().embed(text)
         vs.upsert(COLLECTION_ADRS, adr["id"], embedding, text, {
             "title": adr["title"],
             "status": adr.get("status", "Proposed"),
         })
-    except Exception:
-        pass
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to index ADR {adr['id']}: {e}")
+        return False
