@@ -211,3 +211,133 @@ async def ingest_files(
         yield f"data: {json_mod.dumps({'status': 'complete', 'ingested': ingested, 'total': total})}\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# Import ADR markdown files into the registry
+# ---------------------------------------------------------------------------
+
+class ImportADRsRequest(BaseModel):
+    path: str
+    files: List[str]
+
+
+@router.post("/import-adrs")
+async def import_adrs(
+    req: ImportADRsRequest,
+    user=Depends(require_scopes(["adr:write"]))
+):
+    """Parse markdown files as ADRs and add them to the registry."""
+    import re
+    from app.db.adr_store import create_adr
+
+    folder = Path(os.path.expanduser(req.path)).resolve()
+    if not folder.is_dir():
+        return {"error": "Invalid folder", "imported": 0}
+
+    imported = 0
+    errors = []
+
+    for rel_path in req.files:
+        file_path = (folder / rel_path).resolve()
+        try:
+            file_path.relative_to(folder)
+        except ValueError:
+            errors.append(f"Blocked: {rel_path}")
+            continue
+
+        if not file_path.exists():
+            errors.append(f"Not found: {rel_path}")
+            continue
+
+        try:
+            content = file_path.read_text(encoding="utf-8", errors="replace")
+            parsed = _parse_adr_markdown(content, file_path.name)
+
+            adr = create_adr(
+                title=parsed.get("title", file_path.stem),
+                context=parsed.get("context", ""),
+                decision=parsed.get("decision", ""),
+                consequences=parsed.get("consequences", ""),
+                author="imported",
+                tags=parsed.get("tags", []),
+                ai_generated=False,
+                y_statement=parsed.get("y_statement"),
+                decision_drivers=parsed.get("decision_drivers"),
+                alternatives_considered=parsed.get("alternatives_considered"),
+                impact=parsed.get("impact"),
+                reversibility=parsed.get("reversibility"),
+                related_decisions=parsed.get("related_decisions"),
+            )
+
+            # Index in ChromaDB
+            try:
+                from app.services.embeddings import get_embedding_service
+                from app.services.vector_store import get_vector_store, COLLECTION_ADRS
+                vs = get_vector_store()
+                if vs and adr:
+                    text = f"{adr['title']}\n{adr.get('context', '')}\n{adr.get('decision', '')}"
+                    embedding = get_embedding_service().embed(text)
+                    vs.upsert(COLLECTION_ADRS, adr["id"], embedding, text, {"title": adr["title"]})
+            except Exception:
+                pass
+
+            imported += 1
+        except Exception as e:
+            errors.append(f"{rel_path}: {str(e)}")
+
+    return {"imported": imported, "errors": errors if errors else None, "total": len(req.files)}
+
+
+def _parse_adr_markdown(content: str, filename: str) -> dict:
+    """Best-effort parse an ADR markdown file into structured fields."""
+    import re
+
+    result = {}
+
+    # Title: first # heading or filename
+    title_match = re.search(r'^#\s+(.+)$', content, re.MULTILINE)
+    result["title"] = title_match.group(1).strip() if title_match else filename.replace('.md', '').replace('-', ' ').title()
+
+    # Y-statement: first blockquote
+    y_match = re.search(r'^>\s+(.+)$', content, re.MULTILINE)
+    if y_match:
+        result["y_statement"] = y_match.group(1).strip()
+
+    # Extract sections by ## headings
+    sections = re.split(r'^##\s+', content, flags=re.MULTILINE)
+    section_map = {}
+    for sec in sections[1:]:  # skip preamble
+        lines = sec.strip().split('\n', 1)
+        heading = lines[0].strip().lower()
+        body = lines[1].strip() if len(lines) > 1 else ""
+        section_map[heading] = body
+
+    # Map headings to fields (fuzzy matching)
+    field_map = {
+        "context": ["context", "background", "situation"],
+        "decision": ["decision", "the decision", "chosen option"],
+        "decision_drivers": ["decision drivers", "drivers", "motivation"],
+        "consequences": ["consequences", "outcomes", "results"],
+        "alternatives_considered": ["alternatives", "alternatives considered", "options considered", "options"],
+        "impact": ["impact", "team impact", "affected teams"],
+        "reversibility": ["reversibility", "reversal", "rollback"],
+        "related_decisions": ["related", "related decisions", "links", "references"],
+    }
+
+    for field, headings in field_map.items():
+        for heading in headings:
+            if heading in section_map:
+                result[field] = section_map[heading]
+                break
+
+    # If no structured sections found, use full content as context
+    if not result.get("context") and not result.get("decision"):
+        # Remove the title line and use rest as context
+        body = re.sub(r'^#\s+.+$', '', content, count=1, flags=re.MULTILINE).strip()
+        result["context"] = body[:2000]
+
+    # Tags from keywords in title
+    result["tags"] = []
+
+    return result

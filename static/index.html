@@ -204,7 +204,7 @@ html{font-size:16px;-webkit-font-smoothing:antialiased}body{font-family:var(--sa
 <!-- KNOWLEDGE BASE -->
 <div class="view" id="v-kb">
   <div class="lh"><h1>Knowledge Base</h1></div>
-  <p style="font-size:.8125rem;color:var(--t2);margin-bottom:1.5rem">Documents ingested here become context for all future ADR generation.</p>
+  <p style="font-size:.8125rem;color:var(--t2);margin-bottom:1.5rem">Documents ingested here become context for all future ADR generation. You can also import existing ADR markdown files into the registry.</p>
   <div id="kbStats"></div>
   <div class="f"><label>Add documents from a folder</label><div class="la"><input class="inp" id="kbPath" placeholder="/path/to/docs or ~/project/docs"><button type="button" class="btn btn-s" onclick="scanKB()">Scan</button></div></div>
   <div id="kbScan" style="display:none"></div>
@@ -248,10 +248,10 @@ function renderD(a,data){
   const yel=document.getElementById('dY');yel.textContent=a.y_statement||'';yel.style.display=a.y_statement?'block':'none';
   document.getElementById('dM').innerHTML=[`<span><strong>Status:</strong> ${a.status||'Proposed'}</span>`,`<span><strong>Author:</strong> ${a.author||'—'}</span>`,`<span><strong>Created:</strong> ${fmt(a.created_at)}</span>`,a.ai_model?`<span><strong>Model:</strong> ${a.ai_model}</span>`:''].filter(Boolean).join('');
 
-  // Action buttons (always visible — edit existing or accept new)
+  // Action buttons
   const isNew=!!data;
-  let acts='';
-  if(!isNew){acts=`<button class="btn btn-s" onclick="editMode()">Edit</button><button class="btn btn-s" onclick="chgStatus()">Change status</button><button class="btn btn-s btn-red" onclick="delADR()">Delete</button>`}
+  let acts=`<button class="btn btn-s" onclick="copyMD()">Copy as Markdown</button><button class="btn btn-s" onclick="downloadMD()">Download .md</button>`;
+  if(!isNew){acts+=`<button class="btn btn-s" onclick="editMode()">Edit</button><button class="btn btn-s" onclick="chgStatus()">Change status</button><button class="btn btn-s btn-red" onclick="delADR()">Delete</button>`}
   document.getElementById('dAct').innerHTML=acts;
 
   // Banners
@@ -346,7 +346,7 @@ if(d.error){el.innerHTML=`<div class="prog" style="color:var(--red)">${esc(d.err
 if(!d.files?.length){el.innerHTML='<div class="prog">No supported files found.</div>';return}
 window._scanFiles=d.files;window._scanFolder=d.folder;
 const ext=Object.entries(d.by_extension).map(([e,n])=>`${String(n).padStart(3)} ${e}`).join('\n');
-el.innerHTML=`<div class="scan"><h4>Found ${d.total} files</h4><pre class="scan-stats">${ext}\n${(d.total_size_kb/1024).toFixed(1)} MB</pre><div class="scan-btns"><button class="btn btn-p btn-s" onclick="ingestKB()">Ingest all</button><button class="btn btn-s" onclick="document.getElementById('fl')?.classList.toggle('vis')">Pick files</button></div><div class="flist" id="fl">${d.files.map((f,i)=>`<label class="fi"><input type="checkbox" checked data-i="${i}"><span class="fi-n">${esc(f.path)}</span><span class="fi-s">${(f.size/1024).toFixed(1)}k</span></label>`).join('')}</div></div>`}catch(err){el.innerHTML=`<div class="prog" style="color:var(--red)">${esc(err.message)}</div>`}}
+el.innerHTML=`<div class="scan"><h4>Found ${d.total} files</h4><pre class="scan-stats">${ext}\n${(d.total_size_kb/1024).toFixed(1)} MB</pre><div class="scan-btns"><button class="btn btn-p btn-s" onclick="ingestKB()">Ingest as context</button><button class="btn btn-s" onclick="importADRs()">Import as ADRs</button><button class="btn btn-s" onclick="document.getElementById('fl')?.classList.toggle('vis')">Pick files</button></div><div class="flist" id="fl">${d.files.map((f,i)=>`<label class="fi"><input type="checkbox" checked data-i="${i}"><span class="fi-n">${esc(f.path)}</span><span class="fi-s">${(f.size/1024).toFixed(1)}k</span></label>`).join('')}</div></div>`}catch(err){el.innerHTML=`<div class="prog" style="color:var(--red)">${esc(err.message)}</div>`}}
 
 async function ingestKB(){const cbs=document.querySelectorAll('#fl input:checked');const files=cbs.length?[...cbs].map(cb=>window._scanFiles[cb.dataset.i].path):window._scanFiles.map(f=>f.path);
 const el=document.getElementById('kbScan');
@@ -358,6 +358,21 @@ if(d.status==='complete'){document.getElementById('pBar').style.width='100%';doc
 document.getElementById('pBar').style.width=((d.index+1)/d.total*100).toFixed(0)+'%';
 document.getElementById('pLab').textContent=`${d.index+1}/${d.total} — ${d.file}`;
 if(d.status==='done'||d.status==='error'||d.status==='skipped'){const ic=d.status==='done'?'✓':d.status==='error'?'✗':'—';const cl=d.status==='done'?'var(--green)':d.status==='error'?'var(--red)':'var(--t3)';log.innerHTML+=`<div style="color:${cl}">${ic} ${esc(d.file)}${d.error?' — '+esc(d.error):''}</div>`;log.scrollTop=log.scrollHeight}}catch{}}}}catch(err){toast('Ingestion failed','err')}}
+
+async function importADRs(){
+  const cbs=document.querySelectorAll('#fl input:checked');
+  // Only import .md files
+  const allFiles=cbs.length?[...cbs].map(cb=>window._scanFiles[cb.dataset.i]):window._scanFiles;
+  const mdFiles=allFiles.filter(f=>f.ext==='.md');
+  if(!mdFiles.length){toast('No .md files found to import','err');return}
+  try{
+    const r=await fetch(`${API}/rag/import-adrs`,{method:'POST',headers:H(),body:JSON.stringify({path:window._scanFolder,files:mdFiles.map(f=>f.path)})});
+    const d=await r.json();
+    if(d.imported>0){toast(`${d.imported} ADRs imported into registry`,'ok');loadL();loadKB()}
+    else{toast(d.errors?d.errors[0]:'No ADRs imported','err')}
+    if(d.errors?.length)console.warn('Import errors:',d.errors);
+  }catch(err){toast('Import failed: '+err.message,'err')}
+}
 
 async function ingestText(){const text=document.getElementById('kbPaste')?.value?.trim();if(!text)return;
 try{await fetch(`${API}/../api/v1/ingest/api`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',...(tk?{Authorization:`Bearer ${tk}`}:{})},body:new URLSearchParams({filename:'pasted-text.md',content:text})}).catch(()=>{});
@@ -374,7 +389,54 @@ function tog(el,id){el.classList.toggle('open');document.getElementById(id).clas
 // Utils
 function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
 function fmt(d){try{return new Date(d).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}catch{return d||'—'}}
-function md(t){if(!t)return'';let s=esc(t);s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');s=s.replace(/\*(.+?)\*/g,'<em>$1</em>');s=s.replace(/^### (.+)$/gm,'<h4 style="margin:.75rem 0 .25rem;font-weight:600;font-size:.8125rem">$1</h4>');s=s.replace(/^- (.+)$/gm,'<li>$1</li>');s=s.replace(/(<li>.*<\/li>)/gs,'<ul>$1</ul>');s=s.replace(/<\/ul>\s*<ul>/g,'');s=s.replace(/\|(.+)\|\n\|[-| ]+\|\n((?:\|.+\|\n?)*)/g,(m,hdr,body)=>{const hs=hdr.split('|').map(h=>h.trim()).filter(Boolean);const rs=body.trim().split('\n').map(l=>l.split('|').map(c=>c.trim()).filter(Boolean));return`<table><thead><tr>${hs.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rs.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`});s=s.replace(/\n/g,'<br>');return s}
+function md(t){if(!t)return'';let s=esc(t);s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');s=s.replace(/\*(.+?)\*/g,'<em>$1</em>');s=s.replace(/^### (.+)$/gm,'<h4 style="margin:.75rem 0 .25rem;font-weight:600;font-size:.8125rem">$1</h4>');s=s.replace(/^- (.+)$/gm,'<li>$1</li>');s=s.replace(/(<li>.*<\/li>)/gs,'<ul>$1</ul>');s=s.replace(/<\/ul>\s*<ul>/g,'');s=s.replace(/\|(.+)\|\n\|[-| ]+\|\n((?:\|.+\|\n?)*)/g,(m,hdr,body)=>{const hs=hdr.split('|').map(h=>h.trim()).filter(Boolean);const rs=body.trim().split('\n').map(l=>l.split('|').map(c=>c.trim()).filter(Boolean));return`<table><thead><tr>${hs.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rs.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`});
+// ADR cross-references: ADR-1, ADR-2, etc. become clickable links
+s=s.replace(/ADR[- ]?(\d+)/gi,(m,num)=>{const match=adrs.find(a=>(a.title||'').startsWith(num+'.'));return match?`<a href="#" onclick="event.preventDefault();det('${match.id}')" style="color:var(--accent);text-decoration:underline;cursor:pointer">${m}</a>`:m});
+s=s.replace(/\n/g,'<br>');return s}
+
+// Export to Markdown
+function toMarkdown(a){
+  if(!a)return'';const s=[];
+  s.push(`# ${a.title||'Untitled ADR'}\n`);
+  if(a.y_statement)s.push(`> ${a.y_statement}\n`);
+  s.push(`**Status:** ${a.status||'Proposed'}  `);
+  s.push(`**Author:** ${a.author||'—'}  `);
+  s.push(`**Date:** ${fmt(a.created_at)}  `);
+  if(a.ai_model)s.push(`**Model:** ${a.ai_model}  `);
+  s.push('');
+  const secs=[{k:'context',l:'Context'},{k:'decision_drivers',l:'Decision Drivers'},{k:'decision',l:'Decision'},{k:'alternatives_considered',l:'Alternatives Considered'},{k:'consequences',l:'Consequences'},{k:'impact',l:'Impact'},{k:'reversibility',l:'Reversibility'},{k:'related_decisions',l:'Related Decisions'}];
+  for(const sec of secs){
+    const v=a[sec.k];if(!v)continue;
+    s.push(`## ${sec.l}\n`);
+    // If the section already has ### headers, don't double-wrap
+    if(v.trim().startsWith('###')||v.trim().startsWith('|'))s.push(v.trim());
+    else s.push(v.trim());
+    s.push('');
+  }
+  if(a.tags?.length)s.push(`**Tags:** ${a.tags.join(', ')}\n`);
+  return s.join('\n');
+}
+
+function copyMD(){
+  if(!curADR)return;
+  const md=toMarkdown(curADR);
+  navigator.clipboard.writeText(md).then(()=>toast('Copied to clipboard','ok')).catch(()=>{
+    // Fallback for non-HTTPS
+    const ta=document.createElement('textarea');ta.value=md;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();toast('Copied to clipboard','ok')});
+}
+
+function downloadMD(){
+  if(!curADR)return;
+  const md=toMarkdown(curADR);
+  const num=curADR.title?.match(/^(\d+)\./)?.[1]||'000';
+  const slug=(curADR.title||'untitled').replace(/^\d+\.\s*/,'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/-+$/,'').slice(0,50);
+  const filename=`adr-${num.padStart(3,'0')}-${slug}.md`;
+  const blob=new Blob([md],{type:'text/markdown'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;a.click();
+  URL.revokeObjectURL(url);
+  toast(`Downloaded ${filename}`,'ok');
+}
 function toast(msg,type){const el=document.createElement('div');el.className=`toast toast-${type}`;el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),3000)}
 
 // Keys
