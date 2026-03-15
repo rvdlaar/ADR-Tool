@@ -144,17 +144,26 @@ app.include_router(rag_router, prefix="/api/v1")
 
 
 # =============================================================================
-# Root Endpoint
+# Static Files — serves the frontend SPA
 # =============================================================================
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from pathlib import Path
+
+STATIC_DIR = Path(__file__).parent.parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @app.get("/")
 async def root():
-    """Root endpoint"""
-    result = {
+    """Serve the frontend SPA"""
+    index = STATIC_DIR / "index.html"
+    if index.exists():
+        return FileResponse(str(index))
+    return {
         "name": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "health": "/health"
+        "health": "/health",
+        "docs": "/docs" if not IS_PRODUCTION else None,
     }
-    if not IS_PRODUCTION:
-        result["docs"] = "/docs"
-    return result
