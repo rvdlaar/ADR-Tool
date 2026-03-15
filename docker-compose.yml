@@ -33,8 +33,7 @@ services:
       - ./data:/app/data
       - ./uploads:/tmp/adr-uploads
     depends_on:
-      chromadb:
-        condition: service_healthy
+      - chromadb
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -54,12 +53,6 @@ services:
       - IS_PERSISTENT=TRUE
       - ANONYMIZED_TELEMETRY=FALSE
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 15s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
 volumes:
   chroma-data:
