@@ -7,1469 +7,380 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-:root {
-  --bg: oklch(0.985 0.005 80);
-  --bg-warm: oklch(0.97 0.01 75);
-  --surface: oklch(1 0 0);
-  --border: oklch(0.88 0.01 80);
-  --border-light: oklch(0.93 0.008 80);
-  --text: oklch(0.18 0.02 260);
-  --text-secondary: oklch(0.45 0.01 260);
-  --text-tertiary: oklch(0.62 0.008 260);
-  --accent: oklch(0.35 0.08 260);
-  --accent-light: oklch(0.95 0.02 260);
-  --red: oklch(0.55 0.2 25);
-  --red-bg: oklch(0.96 0.03 25);
-  --green: oklch(0.45 0.15 155);
-  --green-bg: oklch(0.96 0.03 155);
-  --amber: oklch(0.55 0.15 70);
-  --amber-bg: oklch(0.96 0.04 70);
-  --serif: 'Source Serif 4', Georgia, serif;
-  --sans: 'Inter', system-ui, sans-serif;
-  --mono: 'JetBrains Mono', monospace;
-  --ease: cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-html { font-size: 16px; -webkit-font-smoothing: antialiased; }
-body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
-
-/* ================================================================
-   LAYOUT — no sidebar, just a top bar + content
-   ================================================================ */
-
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 clamp(1rem, 4vw, 3rem);
-  height: 56px;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-
-.topbar-brand {
-  font-family: var(--serif);
-  font-size: 1.0625rem;
-  font-weight: 600;
-  color: var(--text);
-  letter-spacing: -0.02em;
-}
-
-.topbar-nav { display: flex; gap: 0; }
-
-.topbar-link {
-  font-size: 0.8125rem;
-  font-weight: 500;
-  padding: 1rem 1.125rem;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: color 0.15s, border-color 0.15s;
-}
-
-.topbar-link:hover { color: var(--text); }
-.topbar-link.active { color: var(--text); border-bottom-color: var(--text); }
-
-.topbar-actions { display: flex; gap: 0.5rem; align-items: center; }
-
-.topbar-stats {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  font-family: var(--mono);
-  margin-right: 0.75rem;
-}
-
-.content { max-width: 720px; margin: 0 auto; padding: 2.5rem clamp(1rem, 4vw, 2rem) 6rem; }
-
-/* ================================================================
-   BUTTONS
-   ================================================================ */
-
-.btn {
-  font-family: var(--sans);
-  font-size: 0.8125rem;
-  font-weight: 500;
-  padding: 0.5rem 1rem;
-  border: 1px solid var(--border);
-  background: var(--surface);
-  color: var(--text);
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn:hover { border-color: var(--text-tertiary); }
-
-.btn-dark {
-  background: var(--text);
-  color: var(--bg);
-  border-color: var(--text);
-}
-
-.btn-dark:hover { opacity: 0.85; }
-
-.btn-sm { padding: 0.375rem 0.75rem; font-size: 0.75rem; }
-
-.btn-ghost {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  padding: 0.375rem 0.5rem;
-}
-
-.btn-ghost:hover { color: var(--text); }
-
-/* ================================================================
-   VIEWS
-   ================================================================ */
-
-.view { display: none; }
-.view.active { display: block; }
-
-/* ================================================================
-   LIST VIEW
-   ================================================================ */
-
-.list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 2rem;
-}
-
-.list-title {
-  font-family: var(--serif);
-  font-size: clamp(1.5rem, 4vw, 2rem);
-  font-weight: 300;
-  letter-spacing: -0.03em;
-  line-height: 1.2;
-}
-
-.list-filter {
-  width: 100%;
-  padding: 0.625rem 0;
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--sans);
-  font-size: 0.875rem;
-  color: var(--text);
-  outline: none;
-  margin-bottom: 1.5rem;
-  transition: border-color 0.15s;
-}
-
-.list-filter:focus { border-bottom-color: var(--text); }
-.list-filter::placeholder { color: var(--text-tertiary); }
-
-/* ADR entries — like a table of contents */
-.adr-entry {
-  display: grid;
-  grid-template-columns: 3rem 1fr auto;
-  gap: 1rem;
-  align-items: baseline;
-  padding: 0.875rem 0;
-  border-bottom: 1px solid var(--border-light);
-  cursor: pointer;
-  transition: background 0.1s;
-}
-
-.adr-entry:hover { background: var(--bg-warm); margin: 0 -1rem; padding-left: 1rem; padding-right: 1rem; }
-
-.entry-num {
-  font-family: var(--mono);
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  font-weight: 500;
-}
-
-.entry-title {
-  font-family: var(--serif);
-  font-size: 1rem;
-  font-weight: 400;
-  line-height: 1.4;
-  color: var(--text);
-}
-
-.entry-summary {
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  margin-top: 0.25rem;
-  line-height: 1.45;
-  display: -webkit-box;
-  -webkit-line-clamp: 1;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  font-style: italic;
-}
-
-.entry-status {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.s-proposed { color: var(--amber); }
-.s-accepted { color: var(--green); }
-.s-deprecated { color: var(--red); }
-.s-superseded { color: var(--text-tertiary); }
-
-.empty {
-  padding: 4rem 0;
-  text-align: left;
-}
-
-.empty h3 {
-  font-family: var(--serif);
-  font-size: 1.25rem;
-  font-weight: 400;
-  margin-bottom: 0.5rem;
-}
-
-.empty p { font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1.5rem; line-height: 1.6; }
-
-/* ================================================================
-   CREATE VIEW — conversational, progressive
-   ================================================================ */
-
-.create-header {
-  margin-bottom: 2rem;
-}
-
-.create-header h2 {
-  font-family: var(--serif);
-  font-size: clamp(1.25rem, 3vw, 1.5rem);
-  font-weight: 400;
-  letter-spacing: -0.02em;
-}
-
-.create-header p { font-size: 0.875rem; color: var(--text-secondary); margin-top: 0.25rem; }
-
-/* Step 1: Essential — always visible */
-.step { margin-bottom: 2rem; }
-
-.field { margin-bottom: 1.25rem; }
-
-.field label {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 500;
-  color: var(--text);
-  margin-bottom: 0.375rem;
-}
-
-.field-hint {
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  margin-bottom: 0.375rem;
-}
-
-.input, .textarea, .select {
-  width: 100%;
-  padding: 0.625rem 0;
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--sans);
-  font-size: 0.9375rem;
-  color: var(--text);
-  outline: none;
-  transition: border-color 0.2s;
-}
-
-.input:focus, .textarea:focus { border-bottom-color: var(--text); }
-.input::placeholder, .textarea::placeholder { color: var(--text-tertiary); }
-
-.textarea {
-  resize: vertical;
-  min-height: 80px;
-  line-height: 1.6;
-  border: none;
-  border-bottom: 1px solid var(--border);
-}
-
-.select {
-  appearance: none;
-  cursor: pointer;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 0 center;
-}
-
-/* Expandable sections */
-.more-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0.5rem 0;
-  margin-bottom: 1rem;
-  transition: color 0.15s;
-  user-select: none;
-}
-
-.more-toggle:hover { color: var(--text); }
-
-.more-toggle svg {
-  width: 14px;
-  height: 14px;
-  transition: transform 0.25s var(--ease);
-}
-
-.more-toggle.open svg { transform: rotate(90deg); }
-
-.expandable {
-  max-height: 0;
-  overflow: hidden;
-  transition: max-height 0.4s var(--ease), opacity 0.3s;
-  opacity: 0;
-}
-
-.expandable.open {
-  max-height: 2000px;
-  opacity: 1;
-}
-
-/* List inputs (requirements, constraints, etc.) */
-.list-add {
-  display: flex;
-  gap: 0.5rem;
-  align-items: flex-end;
-}
-
-.list-add .input { flex: 1; }
-
-.list-tags { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-top: 0.5rem; }
-
-.list-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  background: var(--accent-light);
-  color: var(--text-secondary);
-}
-
-.list-tag button {
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  font-size: 0.875rem;
-  line-height: 1;
-  padding: 0;
-}
-
-.list-tag button:hover { color: var(--red); }
-
-/* Role chips */
-.chips { display: flex; flex-wrap: wrap; gap: 0.375rem; }
-
-.chip {
-  font-size: 0.75rem;
-  padding: 0.3rem 0.625rem;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.12s;
-  user-select: none;
-}
-
-.chip:hover { border-color: var(--text-secondary); }
-.chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
-
-.create-actions {
-  display: flex;
-  gap: 0.75rem;
-  padding-top: 1.5rem;
-  margin-top: 1rem;
-  border-top: 1px solid var(--border-light);
-}
-
-/* ================================================================
-   DETAIL VIEW
-   ================================================================ */
-
-.detail-back {
-  font-size: 0.8125rem;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  margin-bottom: 1.5rem;
-  display: inline-block;
-  transition: color 0.1s;
-}
-
-.detail-back:hover { color: var(--text); }
-
-.detail-head { margin-bottom: 2.5rem; }
-
-.detail-title {
-  font-family: var(--serif);
-  font-size: clamp(1.375rem, 4vw, 1.75rem);
-  font-weight: 600;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
-  margin-bottom: 0.75rem;
-}
-
-.detail-y {
-  font-family: var(--serif);
-  font-size: 1rem;
-  font-style: italic;
-  color: var(--text-secondary);
-  line-height: 1.65;
-  padding-left: 1.25rem;
-  border-left: 2px solid var(--border);
-  margin: 1rem 0 1.25rem;
-}
-
-.detail-meta {
-  display: flex;
-  gap: 1.5rem;
-  font-size: 0.75rem;
-  color: var(--text-tertiary);
-  flex-wrap: wrap;
-}
-
-.detail-meta strong { font-weight: 500; color: var(--text-secondary); }
-
-/* Banners */
-.banner {
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.5rem;
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  display: flex;
-  gap: 0.75rem;
-  align-items: flex-start;
-}
-
-.banner-score {
-  font-family: var(--mono);
-  font-size: 1.25rem;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.banner-pass { background: var(--green-bg); border-left: 3px solid var(--green); }
-.banner-warn { background: var(--amber-bg); border-left: 3px solid var(--amber); }
-.banner-fail { background: var(--red-bg); border-left: 3px solid var(--red); }
-.banner-conflict { background: var(--red-bg); border-left: 3px solid var(--red); }
-
-.banner h4 { font-size: 0.8125rem; font-weight: 600; margin-bottom: 0.125rem; }
-.banner p { color: var(--text-secondary); }
-
-/* Section TOC */
-.section-toc {
-  display: flex;
-  gap: 0.125rem;
-  margin-bottom: 2rem;
-  overflow-x: auto;
-  border-bottom: 1px solid var(--border-light);
-}
-
-.toc-item {
-  font-size: 0.75rem;
-  font-weight: 500;
-  padding: 0.5rem 0.75rem;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  white-space: nowrap;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  transition: all 0.12s;
-}
-
-.toc-item:hover { color: var(--text); }
-.toc-item.active { color: var(--text); border-bottom-color: var(--text); }
-
-/* ADR sections */
-.section {
-  margin-bottom: 2.5rem;
-  scroll-margin-top: 4rem;
-}
-
-.section-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-  margin-bottom: 0.75rem;
-}
-
-.section-body {
-  font-size: 0.9375rem;
-  line-height: 1.75;
-  color: var(--text);
-}
-
-.section-body ul { padding-left: 1.25rem; margin: 0.5rem 0; }
-.section-body li { margin-bottom: 0.375rem; }
-.section-body strong { font-weight: 600; }
-
-.section-body table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.8125rem;
-  margin: 0.75rem 0;
-}
-
-.section-body th {
-  text-align: left;
-  padding: 0.5rem 0.75rem;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-tertiary);
-  border-bottom: 2px solid var(--border);
-}
-
-.section-body td {
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid var(--border-light);
-  color: var(--text-secondary);
-  line-height: 1.5;
-  vertical-align: top;
-}
-
-/* ================================================================
-   SEARCH VIEW
-   ================================================================ */
-
-.search-input {
-  width: 100%;
-  padding: 0.75rem 0;
-  background: none;
-  border: none;
-  border-bottom: 2px solid var(--text);
-  font-family: var(--serif);
-  font-size: 1.25rem;
-  color: var(--text);
-  outline: none;
-  margin-bottom: 2rem;
-}
-
-.search-input::placeholder { color: var(--text-tertiary); }
-
-.search-hit {
-  padding: 0.875rem 0;
-  border-bottom: 1px solid var(--border-light);
-  cursor: pointer;
-  transition: background 0.1s;
-}
-
-.search-hit:hover { background: var(--bg-warm); margin: 0 -0.75rem; padding-left: 0.75rem; padding-right: 0.75rem; }
-
-.search-hit h4 { font-size: 0.9375rem; font-weight: 500; margin-bottom: 0.125rem; }
-.search-hit p { font-size: 0.8125rem; color: var(--text-secondary); line-height: 1.5; }
-.search-hit-meta { font-family: var(--mono); font-size: 0.6875rem; color: var(--text-tertiary); margin-top: 0.25rem; }
-
-/* ================================================================
-   GENERATING — skeleton reveal
-   ================================================================ */
-
-.generating {
-  display: none;
-  position: fixed;
-  inset: 0;
-  background: oklch(0.985 0.005 80 / 0.92);
-  z-index: 100;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-  gap: 1rem;
-  backdrop-filter: blur(4px);
-}
-
-.generating.active { display: flex; }
-
-.gen-bar {
-  width: 200px;
-  height: 2px;
-  background: var(--border);
-  position: relative;
-  overflow: hidden;
-}
-
-.gen-bar::after {
-  content: '';
-  position: absolute;
-  left: -40%;
-  width: 40%;
-  height: 100%;
-  background: var(--text);
-  animation: slide 1.2s ease-in-out infinite;
-}
-
-@keyframes slide { to { left: 100%; } }
-
-.gen-label {
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-
-.gen-step {
-  font-family: var(--mono);
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
-}
-
-/* ================================================================
-   RESPONSIVE
-   ================================================================ */
-
-@media (max-width: 640px) {
-  .topbar-stats { display: none; }
-  .content { padding: 1.5rem 1rem 4rem; }
-  .adr-entry { grid-template-columns: 1fr auto; }
-  .entry-num { display: none; }
-}
-
-/* ================================================================
-   EDITORIAL — editable sections
-   ================================================================ */
-
-.section-body[contenteditable] {
-  outline: none;
-  border: 1px solid transparent;
-  padding: 0.75rem;
-  margin: -0.75rem;
-  transition: border-color 0.15s, background 0.15s;
-  border-radius: 2px;
-}
-
-.section-body[contenteditable]:hover { border-color: var(--border-light); }
-.section-body[contenteditable]:focus { border-color: var(--accent); background: var(--surface); }
-
-.edit-hint {
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
-  font-style: italic;
-  margin-bottom: 1rem;
-}
-
-.detail-actions {
-  display: flex;
-  gap: 0.75rem;
-  padding-top: 1.5rem;
-  margin-top: 2rem;
-  border-top: 1px solid var(--border-light);
-}
-
-/* ================================================================
-   DROP ZONE — drag & drop context documents
-   ================================================================ */
-
-.dropzone {
-  border: 1.5px dashed var(--border);
-  padding: 1.25rem;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  margin-bottom: 1rem;
-  position: relative;
-}
-
-.dropzone:hover, .dropzone.over {
-  border-color: var(--accent);
-  background: var(--accent-light);
-}
-
-.dropzone-label {
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-}
-
-.dropzone-label strong { color: var(--text); font-weight: 500; }
-
-.dropzone-hint {
-  font-size: 0.6875rem;
-  color: var(--text-tertiary);
-  margin-top: 0.25rem;
-}
-
-.dropzone input[type="file"] {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.ingested-files { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.5rem; }
-
-.ingested-file {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.375rem 0.5rem;
-  background: var(--green-bg);
-  font-size: 0.75rem;
-  color: var(--green);
-}
-
-.ingested-file button {
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  font-size: 0.875rem;
-}
-
-/* ================================================================
-   FOLDER SCAN
-   ================================================================ */
-
-.scan-summary {
-  padding: 1rem;
-  background: var(--bg-warm);
-  border: 1px solid var(--border-light);
-  margin-top: 0.75rem;
-}
-
-.scan-summary h4 {
-  font-size: 0.8125rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-
-.scan-stats {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-family: var(--mono);
-  margin-bottom: 0.75rem;
-  line-height: 1.6;
-}
-
-.scan-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.file-list {
-  max-height: 240px;
-  overflow-y: auto;
-  display: none;
-  flex-direction: column;
-  gap: 1px;
-  margin-top: 0.5rem;
-}
-
-.file-list.visible { display: flex; }
-
-.file-item {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.375rem 0.5rem;
-  font-size: 0.75rem;
-  background: var(--surface);
-  cursor: pointer;
-  transition: background 0.1s;
-}
-
-.file-item:hover { background: var(--bg-warm); }
-
-.file-item input[type="checkbox"] {
-  accent-color: var(--text);
-  width: 14px;
-  height: 14px;
-}
-
-.file-item-name { flex: 1; color: var(--text); font-family: var(--mono); font-size: 0.6875rem; }
-.file-item-size { color: var(--text-tertiary); font-family: var(--mono); font-size: 0.625rem; }
-
-.scan-progress {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-style: italic;
-  padding: 0.5rem 0;
-}
-
-/* ================================================================
-   ANIMATIONS
-   ================================================================ */
-
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.adr-entry { animation: fadeUp 0.35s var(--ease) both; }
-.adr-entry:nth-child(2) { animation-delay: 40ms; }
-.adr-entry:nth-child(3) { animation-delay: 80ms; }
-.adr-entry:nth-child(4) { animation-delay: 120ms; }
-.adr-entry:nth-child(5) { animation-delay: 160ms; }
-.adr-entry:nth-child(6) { animation-delay: 200ms; }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
-}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:oklch(0.985 0.005 80);--warm:oklch(0.97 0.01 75);--surface:oklch(1 0 0);--border:oklch(0.88 0.01 80);--border-l:oklch(0.93 0.008 80);--t1:oklch(0.18 0.02 260);--t2:oklch(0.45 0.01 260);--t3:oklch(0.62 0.008 260);--accent:oklch(0.35 0.08 260);--accent-bg:oklch(0.95 0.02 260);--red:oklch(0.55 0.2 25);--red-bg:oklch(0.96 0.03 25);--green:oklch(0.45 0.15 155);--green-bg:oklch(0.96 0.03 155);--amber:oklch(0.55 0.15 70);--amber-bg:oklch(0.96 0.04 70);--serif:'Source Serif 4',Georgia,serif;--sans:'Inter',system-ui,sans-serif;--mono:'JetBrains Mono',monospace;--ease:cubic-bezier(0.16,1,0.3,1)}
+html{font-size:16px;-webkit-font-smoothing:antialiased}body{font-family:var(--sans);background:var(--bg);color:var(--t1);min-height:100vh}
+
+/* Layout */
+.bar{display:flex;align-items:center;justify-content:space-between;padding:0 clamp(1rem,4vw,3rem);height:52px;border-bottom:1px solid var(--border);background:var(--surface);position:sticky;top:0;z-index:10}
+.bar-brand{font-family:var(--serif);font-size:1rem;font-weight:600;letter-spacing:-0.02em}
+.bar-nav{display:flex}.bar-link{font-size:.8125rem;font-weight:500;padding:.875rem 1rem;color:var(--t3);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:color .12s,border-color .12s}
+.bar-link:hover{color:var(--t1)}.bar-link.on{color:var(--t1);border-bottom-color:var(--t1)}
+.bar-right{display:flex;gap:.75rem;align-items:center}
+.bar-stat{font-size:.6875rem;color:var(--t3);font-family:var(--mono)}
+.bar-kb{font-size:.6875rem;color:var(--green);font-family:var(--mono);cursor:pointer}.bar-kb:hover{text-decoration:underline}
+.wrap{max-width:700px;margin:0 auto;padding:2rem clamp(1rem,4vw,2rem) 5rem}
+.view{display:none}.view.on{display:block}
+
+/* Buttons */
+.btn{font-family:var(--sans);font-size:.8125rem;font-weight:500;padding:.5rem 1rem;border:1px solid var(--border);background:var(--surface);color:var(--t1);cursor:pointer;transition:all .12s}
+.btn:hover{border-color:var(--t2)}.btn-p{background:var(--t1);color:var(--bg);border-color:var(--t1)}.btn-p:hover{opacity:.85}
+.btn-s{padding:.375rem .75rem;font-size:.75rem}.btn-g{background:none;border:none;color:var(--t2);padding:.375rem}.btn-g:hover{color:var(--t1)}
+.btn-red{color:var(--red);border-color:var(--red)}.btn-red:hover{background:var(--red-bg)}
+
+/* List */
+.lh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:1.5rem}
+.lh h1{font-family:var(--serif);font-size:clamp(1.5rem,4vw,1.875rem);font-weight:300;letter-spacing:-0.03em}
+.filter{width:100%;padding:.5rem 0;background:none;border:none;border-bottom:1px solid var(--border);font-size:.875rem;color:var(--t1);outline:none;margin-bottom:1rem;transition:border-color .12s}
+.filter:focus{border-bottom-color:var(--t1)}.filter::placeholder{color:var(--t3)}
+.entry{display:grid;grid-template-columns:2.5rem 1fr auto;gap:.75rem;align-items:baseline;padding:.75rem 0;border-bottom:1px solid var(--border-l);cursor:pointer;transition:background .08s}
+.entry:hover{background:var(--warm);margin:0 -.75rem;padding-left:.75rem;padding-right:.75rem}
+.entry-n{font-family:var(--mono);font-size:.6875rem;color:var(--t3);font-weight:500}
+.entry-t{font-family:var(--serif);font-size:.9375rem;font-weight:400;line-height:1.4}
+.entry-y{font-size:.75rem;color:var(--t2);margin-top:.125rem;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.entry-s{font-size:.625rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.s-proposed{color:var(--amber)}.s-accepted{color:var(--green)}.s-deprecated{color:var(--red)}.s-superseded{color:var(--t3)}
+.empty{padding:3rem 0}.empty h3{font-family:var(--serif);font-size:1.125rem;font-weight:400;margin-bottom:.375rem}.empty p{font-size:.8125rem;color:var(--t2);line-height:1.6;margin-bottom:1.25rem;max-width:480px}
+
+/* Form */
+.f{margin-bottom:1.25rem}.f label{display:block;font-size:.8125rem;font-weight:500;margin-bottom:.25rem}.f-hint{font-size:.6875rem;color:var(--t3);margin-bottom:.25rem}
+.inp,.ta{width:100%;padding:.5rem 0;background:none;border:none;border-bottom:1px solid var(--border);font-family:var(--sans);font-size:.9375rem;color:var(--t1);outline:none;transition:border-color .15s}
+.inp:focus,.ta:focus{border-bottom-color:var(--t1)}.inp::placeholder,.ta::placeholder{color:var(--t3)}
+.ta{resize:vertical;min-height:72px;line-height:1.6}
+.sel{width:100%;padding:.5rem 0;background:none;border:none;border-bottom:1px solid var(--border);font-family:var(--sans);font-size:.9375rem;color:var(--t1);outline:none;appearance:none;cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 0 center}
+.toggle{display:inline-flex;align-items:center;gap:.375rem;font-size:.8125rem;color:var(--t2);cursor:pointer;padding:.5rem 0;user-select:none;transition:color .12s}.toggle:hover{color:var(--t1)}
+.toggle svg{width:14px;height:14px;transition:transform .2s var(--ease)}.toggle.open svg{transform:rotate(90deg)}
+.exp{max-height:0;overflow:hidden;transition:max-height .35s var(--ease),opacity .25s;opacity:0}.exp.open{max-height:3000px;opacity:1}
+.la{display:flex;gap:.5rem;align-items:flex-end}.la .inp{flex:1}
+.tags{display:flex;flex-wrap:wrap;gap:.25rem;margin-top:.375rem}
+.tag{display:inline-flex;align-items:center;gap:.25rem;font-size:.6875rem;padding:.2rem .5rem;background:var(--accent-bg);color:var(--t2)}
+.tag button{background:none;border:none;color:var(--t3);cursor:pointer;font-size:.8rem;padding:0;line-height:1}.tag button:hover{color:var(--red)}
+.chips{display:flex;flex-wrap:wrap;gap:.25rem}
+.chip{font-size:.6875rem;padding:.25rem .5rem;border:1px solid var(--border);color:var(--t2);cursor:pointer;transition:all .1s;user-select:none}
+.chip:hover{border-color:var(--t2)}.chip.on{background:var(--t1);color:var(--bg);border-color:var(--t1)}
+.f-actions{display:flex;gap:.75rem;padding-top:1.25rem;margin-top:.75rem;border-top:1px solid var(--border-l)}
+
+/* Detail */
+.back{font-size:.8125rem;color:var(--t3);cursor:pointer;margin-bottom:1.25rem;display:inline-block;transition:color .1s}.back:hover{color:var(--t1)}
+.d-title{font-family:var(--serif);font-size:clamp(1.25rem,3.5vw,1.625rem);font-weight:600;letter-spacing:-0.02em;line-height:1.25;margin-bottom:.625rem}
+.d-y{font-family:var(--serif);font-size:.9375rem;font-style:italic;color:var(--t2);line-height:1.6;padding-left:1rem;border-left:2px solid var(--border);margin:.75rem 0 1rem}
+.d-meta{display:flex;gap:1.25rem;font-size:.6875rem;color:var(--t3);flex-wrap:wrap;margin-bottom:1.25rem}.d-meta strong{font-weight:500;color:var(--t2)}
+.d-actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.5rem}
+
+.banner{padding:.625rem .875rem;margin-bottom:1rem;font-size:.8125rem;line-height:1.5;display:flex;gap:.625rem;align-items:flex-start}
+.b-score{font-family:var(--mono);font-size:1.125rem;font-weight:600;flex-shrink:0}
+.b-pass{background:var(--green-bg);border-left:3px solid var(--green)}.b-warn{background:var(--amber-bg);border-left:3px solid var(--amber)}.b-fail{background:var(--red-bg);border-left:3px solid var(--red)}
+.banner h4{font-size:.8125rem;font-weight:600;margin-bottom:.125rem}.banner p{color:var(--t2);font-size:.75rem}
+
+.toc{display:flex;gap:.125rem;margin-bottom:1.5rem;overflow-x:auto;border-bottom:1px solid var(--border-l);-webkit-overflow-scrolling:touch}
+.toc-i{font-size:.6875rem;font-weight:500;padding:.4375rem .625rem;color:var(--t3);cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .1s}
+.toc-i:hover{color:var(--t1)}.toc-i.on{color:var(--t1);border-bottom-color:var(--t1)}
+.sec{margin-bottom:2rem;scroll-margin-top:3.5rem}
+.sec-l{font-size:.625rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--t3);margin-bottom:.5rem}
+.sec-b{font-size:.9375rem;line-height:1.7}
+.sec-b[contenteditable]{outline:none;border:1px dashed transparent;padding:.5rem;margin:-.5rem;border-radius:2px;transition:border-color .12s,background .12s}
+.sec-b[contenteditable]:hover{border-color:var(--border)}.sec-b[contenteditable]:focus{border-color:var(--accent);background:var(--surface)}
+.sec-b ul{padding-left:1.25rem;margin:.5rem 0}.sec-b li{margin-bottom:.25rem}.sec-b strong{font-weight:600}
+.sec-b table{width:100%;border-collapse:collapse;font-size:.8125rem;margin:.5rem 0}
+.sec-b th{text-align:left;padding:.4375rem .625rem;font-size:.625rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);border-bottom:2px solid var(--border)}
+.sec-b td{padding:.4375rem .625rem;border-bottom:1px solid var(--border-l);color:var(--t2);line-height:1.5;vertical-align:top}
+.edit-bar{font-size:.6875rem;color:var(--t3);font-style:italic;margin-bottom:.75rem}
+.save-bar{display:flex;gap:.5rem;padding-top:1.25rem;margin-top:1.5rem;border-top:1px solid var(--border-l)}
+
+/* Search */
+.s-inp{width:100%;padding:.625rem 0;background:none;border:none;border-bottom:2px solid var(--t1);font-family:var(--serif);font-size:1.125rem;color:var(--t1);outline:none;margin-bottom:1.5rem}.s-inp::placeholder{color:var(--t3)}
+.hit{padding:.75rem 0;border-bottom:1px solid var(--border-l);cursor:pointer;transition:background .08s}.hit:hover{background:var(--warm);margin:0 -.75rem;padding-left:.75rem;padding-right:.75rem}
+.hit h4{font-size:.875rem;font-weight:500;margin-bottom:.125rem}.hit p{font-size:.75rem;color:var(--t2);line-height:1.5}.hit-m{font-family:var(--mono);font-size:.625rem;color:var(--t3);margin-top:.125rem}
+
+/* Knowledge Base view */
+.kb-stat{padding:.75rem 1rem;background:var(--warm);border:1px solid var(--border-l);margin-bottom:1.5rem;font-size:.8125rem;display:flex;justify-content:space-between;align-items:center}
+
+/* Folder scan */
+.scan{padding:.875rem;background:var(--warm);border:1px solid var(--border-l);margin-top:.5rem}
+.scan h4{font-size:.8125rem;font-weight:600;margin-bottom:.375rem}
+.scan-stats{font-size:.6875rem;color:var(--t2);font-family:var(--mono);margin-bottom:.5rem;line-height:1.6;white-space:pre}
+.scan-btns{display:flex;gap:.375rem;margin-bottom:.375rem}
+.flist{max-height:200px;overflow-y:auto;display:none;flex-direction:column;gap:1px;margin-top:.375rem}.flist.vis{display:flex}
+.fi{display:flex;align-items:center;gap:.375rem;padding:.25rem .375rem;font-size:.6875rem;background:var(--surface)}.fi input{accent-color:var(--t1);width:13px;height:13px}
+.fi-n{flex:1;font-family:var(--mono);font-size:.625rem}.fi-s{color:var(--t3);font-family:var(--mono);font-size:.5625rem}
+.prog{font-size:.6875rem;color:var(--t2);font-style:italic;padding:.375rem 0}
+.ing{display:flex;align-items:center;gap:.375rem;padding:.25rem .5rem;font-size:.6875rem;background:var(--green-bg);color:var(--green);margin-top:.25rem}
+
+/* Generating */
+.gen{display:none;position:fixed;inset:0;background:oklch(0.985 0.005 80/0.9);z-index:100;justify-content:center;align-items:center;flex-direction:column;gap:.75rem;backdrop-filter:blur(3px)}
+.gen.on{display:flex}
+.gen-bar{width:180px;height:2px;background:var(--border);position:relative;overflow:hidden}
+.gen-bar::after{content:'';position:absolute;left:-40%;width:40%;height:100%;background:var(--t1);animation:slide 1.2s ease-in-out infinite}
+@keyframes slide{to{left:100%}}
+.gen-t{font-size:.8125rem;color:var(--t2)}.gen-s{font-family:var(--mono);font-size:.6875rem;color:var(--t3)}
+.gen-cancel{margin-top:.5rem}
+
+/* Toast */
+.toast{position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:200;max-width:400px;padding:.5rem 1rem;font-size:.8125rem;animation:fadeUp .3s var(--ease)}
+.toast-ok{background:var(--green-bg);border-left:3px solid var(--green);color:var(--green)}
+.toast-err{background:var(--red-bg);border-left:3px solid var(--red);color:var(--red)}
+
+@keyframes fadeUp{from{opacity:0;transform:translateX(-50%) translateY(6px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+.entry{animation:fadeIn .3s var(--ease) both}@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.entry:nth-child(2){animation-delay:30ms}.entry:nth-child(3){animation-delay:60ms}.entry:nth-child(4){animation-delay:90ms}.entry:nth-child(5){animation-delay:120ms}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
+@media(max-width:640px){.bar-stat,.bar-kb{display:none}.wrap{padding:1.25rem 1rem 4rem}.entry{grid-template-columns:1fr auto}.entry-n{display:none}}
 </style>
 </head>
 <body>
-
-<header class="topbar">
-  <div class="topbar-brand">ADR</div>
-  <nav class="topbar-nav">
-    <div class="topbar-link active" onclick="go('list')">Decisions</div>
-    <div class="topbar-link" onclick="go('create')">New</div>
-    <div class="topbar-link" onclick="go('search')">Search</div>
+<header class="bar">
+  <div class="bar-brand">ADR</div>
+  <nav class="bar-nav">
+    <div class="bar-link on" onclick="go('list')">Decisions</div>
+    <div class="bar-link" onclick="go('create')">New</div>
+    <div class="bar-link" onclick="go('search')">Search</div>
+    <div class="bar-link" onclick="go('kb')">Knowledge</div>
   </nav>
-  <div class="topbar-actions">
-    <span class="topbar-stats" id="stats"></span>
+  <div class="bar-right">
+    <span class="bar-kb" id="kbBadge" onclick="go('kb')" style="display:none"></span>
+    <span class="bar-stat" id="stats"></span>
   </div>
 </header>
 
-<div class="content">
+<div class="wrap">
 
-  <!-- LIST -->
-  <div class="view active" id="v-list">
-    <div class="list-header">
-      <h1 class="list-title">Decision Registry</h1>
-      <button class="btn btn-dark" onclick="go('create')">New decision</button>
+<!-- LIST -->
+<div class="view on" id="v-list">
+  <div class="lh"><h1>Decision Registry</h1><button class="btn btn-p" onclick="go('create')">New decision</button></div>
+  <input class="filter" placeholder="Filter..." id="flt" oninput="flt()">
+  <div id="ls"></div>
+</div>
+
+<!-- CREATE — minimal friction: title + description + generate -->
+<div class="view" id="v-create">
+  <h2 style="font-family:var(--serif);font-size:1.375rem;font-weight:400;margin-bottom:.25rem">What are you deciding?</h2>
+  <p style="font-size:.8125rem;color:var(--t2);margin-bottom:1.5rem">Title and context are enough. Everything else is optional.</p>
+  <form id="fm" onsubmit="gen(event)">
+    <div class="f"><label>Decision title</label><input class="inp" name="title" required placeholder="Use PostgreSQL for primary database" autofocus></div>
+    <div class="f"><label>What's the context?</label><div class="f-hint">The problem, why a decision is needed now, what's at stake.</div><textarea class="ta" name="description" required placeholder="We need a persistent data store that supports complex queries and transactions. Our current SQLite setup won't scale past 1M rows with concurrent writes..."></textarea></div>
+
+    <div class="toggle" onclick="tog(this,'more1')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>Add more detail for a richer result</div>
+    <div class="exp" id="more1">
+      <div class="f"><label>Additional context</label><textarea class="ta" name="context" placeholder="Background, prior discussions, triggering events..." style="min-height:56px"></textarea></div>
+      <div class="f"><label>Requirements</label><div class="la"><input class="inp" id="i-req" placeholder="Must support ACID transactions" onkeydown="kd(event,'req')"><button type="button" class="btn btn-s" onclick="at('req')">Add</button></div><div class="tags" id="t-req"></div></div>
+      <div class="f"><label>Constraints</label><div class="la"><input class="inp" id="i-con" placeholder="Must be open source" onkeydown="kd(event,'con')"><button type="button" class="btn btn-s" onclick="at('con')">Add</button></div><div class="tags" id="t-con"></div></div>
+      <div class="f"><label>Alternatives to evaluate</label><div class="la"><input class="inp" id="i-alt" placeholder="MySQL, MongoDB, CockroachDB" onkeydown="kd(event,'alt')"><button type="button" class="btn btn-s" onclick="at('alt')">Add</button></div><div class="tags" id="t-alt"></div></div>
+      <div class="f"><label>Decision drivers</label><div class="f-hint">Why now?</div><div class="la"><input class="inp" id="i-drv" placeholder="Current DB hitting scaling limits" onkeydown="kd(event,'drv')"><button type="button" class="btn btn-s" onclick="at('drv')">Add</button></div><div class="tags" id="t-drv"></div></div>
+      <div class="f"><label>Who is impacted?</label><div class="chips"><span class="chip" onclick="this.classList.toggle('on')">Backend</span><span class="chip" onclick="this.classList.toggle('on')">Frontend</span><span class="chip" onclick="this.classList.toggle('on')">DevOps</span><span class="chip" onclick="this.classList.toggle('on')">Security</span><span class="chip" onclick="this.classList.toggle('on')">Data Eng</span><span class="chip" onclick="this.classList.toggle('on')">Product</span></div></div>
+      <div class="f"><label>Success criteria</label><div class="la"><input class="inp" id="i-suc" placeholder="P99 latency < 200ms" onkeydown="kd(event,'suc')"><button type="button" class="btn btn-s" onclick="at('suc')">Add</button></div><div class="tags" id="t-suc"></div></div>
+      <div class="f"><label>Timeline</label><input class="inp" name="timeline" placeholder="6-month commitment, reversible first 2 months"></div>
+      <div class="f"><label>Scope</label><input class="inp" name="scope" placeholder="REST APIs only, not gRPC"></div>
+      <div class="f"><label>Profile</label><select class="sel" name="profile"><option value="detailed">Detailed — metric-driven</option><option value="guided">Guided — with explanations</option></select></div>
     </div>
-    <input class="list-filter" type="text" placeholder="Filter by title, context, or decision..." id="filterInput" oninput="filter()">
-    <div id="adrList"></div>
+    <div class="f-actions"><button type="submit" class="btn btn-p">Generate ADR</button><button type="button" class="btn" onclick="go('list')">Cancel</button></div>
+  </form>
+</div>
+
+<!-- DETAIL -->
+<div class="view" id="v-detail">
+  <div class="back" onclick="go('list')">&larr; Back</div>
+  <h1 class="d-title" id="dT"></h1>
+  <div class="d-y" id="dY" style="display:none"></div>
+  <div class="d-meta" id="dM"></div>
+  <div class="d-actions" id="dAct"></div>
+  <div id="dB"></div>
+  <p class="edit-bar" id="dEdit" style="display:none">Click any section to edit inline.</p>
+  <nav class="toc" id="dToc"></nav>
+  <div id="dSec"></div>
+  <div class="save-bar" id="dSave" style="display:none">
+    <button class="btn btn-p" onclick="saveADR('Accepted')">Accept</button>
+    <button class="btn" onclick="saveADR('Proposed')">Save as draft</button>
+    <button class="btn" onclick="regenADR()">Regenerate</button>
+    <button class="btn btn-g" onclick="go('list')">Discard</button>
   </div>
+</div>
 
-  <!-- CREATE -->
-  <div class="view" id="v-create">
-    <div class="create-header">
-      <h2>What are you deciding?</h2>
-      <p>Start with the essentials. Add detail if you want a richer result.</p>
-    </div>
+<!-- SEARCH -->
+<div class="view" id="v-search">
+  <input class="s-inp" placeholder="What are you looking for?" id="sQ" onkeydown="if(event.key==='Enter')doS()">
+  <div id="sR"></div>
+</div>
 
-    <form id="form" onsubmit="generate(event)">
-      <div class="step">
-        <div class="field">
-          <label>Decision title</label>
-          <input class="input" name="title" required placeholder="Use PostgreSQL for primary database">
-        </div>
-        <div class="field">
-          <label>What's the context?</label>
-          <div class="field-hint">Describe the problem and why a decision is needed now.</div>
-          <textarea class="textarea" name="description" required placeholder="We need a persistent data store that supports complex queries, transactions, and can scale to our projected 10M rows..."></textarea>
-        </div>
-        <div class="field">
-          <label>Profile</label>
-          <select class="select" name="profile">
-            <option value="detailed">Detailed — metric-driven, concise</option>
-            <option value="guided">Guided — with explanatory context</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="field">
-        <label>Context sources</label>
-        <div class="field-hint">Point to a folder and we'll read your docs. Or paste text directly.</div>
-        <div id="folderSetup">
-          <div class="list-add">
-            <input class="input" id="folderPath" placeholder="/path/to/your/docs or ~/projects/my-app/docs">
-            <button type="button" class="btn btn-sm" onclick="scanFolder()">Scan</button>
-          </div>
-        </div>
-        <div id="folderResults" style="display:none"></div>
-        <div class="ingested-files" id="ingestedFiles"></div>
-        <textarea class="textarea" id="pastedContext" placeholder="Or paste text directly — meeting notes, Slack threads, existing ADRs..." style="min-height:60px;margin-top:0.75rem"></textarea>
-      </div>
-
-      <div class="more-toggle" onclick="toggleMore(this, 'moreContext')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-        Add constraints, alternatives, and impact details
-      </div>
-
-      <div class="expandable" id="moreContext">
-        <div class="step">
-          <div class="field">
-            <label>Additional context</label>
-            <textarea class="textarea" name="context" placeholder="Background, prior discussions, triggering events..." style="min-height:60px"></textarea>
-          </div>
-
-          <div class="field">
-            <label>Requirements</label>
-            <div class="list-add">
-              <input class="input" id="i-req" placeholder="Must support ACID transactions" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag('req')}">
-              <button type="button" class="btn btn-sm" onclick="addTag('req')">Add</button>
-            </div>
-            <div class="list-tags" id="t-req"></div>
-          </div>
-
-          <div class="field">
-            <label>Constraints</label>
-            <div class="list-add">
-              <input class="input" id="i-con" placeholder="Must be open source" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag('con')}">
-              <button type="button" class="btn btn-sm" onclick="addTag('con')">Add</button>
-            </div>
-            <div class="list-tags" id="t-con"></div>
-          </div>
-
-          <div class="field">
-            <label>Alternatives to evaluate</label>
-            <div class="list-add">
-              <input class="input" id="i-alt" placeholder="MySQL, MongoDB, CockroachDB" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag('alt')}">
-              <button type="button" class="btn btn-sm" onclick="addTag('alt')">Add</button>
-            </div>
-            <div class="list-tags" id="t-alt"></div>
-          </div>
-        </div>
-
-        <div class="more-toggle" onclick="toggleMore(this, 'moreImpact')">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-          Impact, success criteria, and scope
-        </div>
-
-        <div class="expandable" id="moreImpact">
-          <div class="step">
-            <div class="field">
-              <label>Decision drivers</label>
-              <div class="field-hint">Why is this decision happening now?</div>
-              <div class="list-add">
-                <input class="input" id="i-drv" placeholder="Current DB hitting scaling limits" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag('drv')}">
-                <button type="button" class="btn btn-sm" onclick="addTag('drv')">Add</button>
-              </div>
-              <div class="list-tags" id="t-drv"></div>
-            </div>
-
-            <div class="field">
-              <label>Who is impacted?</label>
-              <div class="chips">
-                <span class="chip" onclick="this.classList.toggle('on')">Backend</span>
-                <span class="chip" onclick="this.classList.toggle('on')">Frontend</span>
-                <span class="chip" onclick="this.classList.toggle('on')">DevOps / SRE</span>
-                <span class="chip" onclick="this.classList.toggle('on')">Security</span>
-                <span class="chip" onclick="this.classList.toggle('on')">Data Eng</span>
-                <span class="chip" onclick="this.classList.toggle('on')">Product</span>
-                <span class="chip" onclick="this.classList.toggle('on')">QA</span>
-              </div>
-            </div>
-
-            <div class="field">
-              <label>Success criteria</label>
-              <div class="list-add">
-                <input class="input" id="i-suc" placeholder="P99 query latency < 200ms" onkeydown="if(event.key==='Enter'){event.preventDefault();addTag('suc')}">
-                <button type="button" class="btn btn-sm" onclick="addTag('suc')">Add</button>
-              </div>
-              <div class="list-tags" id="t-suc"></div>
-            </div>
-
-            <div class="field">
-              <label>Timeline</label>
-              <input class="input" name="timeline" placeholder="6-month commitment, reversible within first 2 months">
-            </div>
-
-            <div class="field">
-              <label>Scope</label>
-              <input class="input" name="scope" placeholder="Applies to REST APIs only, not gRPC services">
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="create-actions">
-        <button type="submit" class="btn btn-dark">Generate ADR</button>
-        <button type="button" class="btn" onclick="go('list')">Cancel</button>
-      </div>
-    </form>
-  </div>
-
-  <!-- DETAIL -->
-  <div class="view" id="v-detail">
-    <div class="detail-back" onclick="go('list')">&larr; Back</div>
-    <div class="detail-head">
-      <h1 class="detail-title" id="dTitle"></h1>
-      <div class="detail-y" id="dY"></div>
-      <div class="detail-meta" id="dMeta"></div>
-    </div>
-    <div id="dBanners"></div>
-    <p class="edit-hint" id="dEditHint" style="display:none">Click any section to edit directly. Your changes are preserved when you accept.</p>
-    <nav class="section-toc" id="dToc"></nav>
-    <div id="dSections"></div>
-    <div class="detail-actions" id="dActions" style="display:none">
-      <button class="btn btn-dark" onclick="acceptADR()">Accept this ADR</button>
-      <button class="btn" onclick="regenerateADR()">Regenerate</button>
-      <button class="btn btn-ghost" onclick="go('list')">Discard</button>
-    </div>
-  </div>
-
-  <!-- SEARCH -->
-  <div class="view" id="v-search">
-    <input class="search-input" type="text" placeholder="What are you looking for?" id="searchQ" onkeydown="if(event.key==='Enter')doSearch()">
-    <div id="searchResults"></div>
-  </div>
+<!-- KNOWLEDGE BASE -->
+<div class="view" id="v-kb">
+  <div class="lh"><h1>Knowledge Base</h1></div>
+  <p style="font-size:.8125rem;color:var(--t2);margin-bottom:1.5rem">Documents ingested here become context for all future ADR generation.</p>
+  <div id="kbStats"></div>
+  <div class="f"><label>Add documents from a folder</label><div class="la"><input class="inp" id="kbPath" placeholder="/path/to/docs or ~/project/docs"><button type="button" class="btn btn-s" onclick="scanKB()">Scan</button></div></div>
+  <div id="kbScan" style="display:none"></div>
+  <div id="kbIng"></div>
+  <div style="margin-top:1.5rem"><label style="font-size:.8125rem;font-weight:500;display:block;margin-bottom:.375rem">Or paste text directly</label><textarea class="ta" id="kbPaste" placeholder="Paste meeting notes, design docs, RFCs..." style="min-height:80px"></textarea><button class="btn btn-s" style="margin-top:.5rem" onclick="ingestText()">Ingest text</button></div>
+  <div style="margin-top:2rem" id="kbDocs"></div>
+</div>
 
 </div>
 
 <!-- Generating -->
-<div class="generating" id="genOverlay">
+<div class="gen" id="genO">
   <div class="gen-bar"></div>
-  <div class="gen-label" id="genLabel">Analyzing context...</div>
-  <div class="gen-step" id="genStep">step 1 of 4</div>
+  <div class="gen-t" id="genL">Analyzing context...</div>
+  <div class="gen-s" id="genS">step 1 of 4</div>
+  <button class="btn btn-s gen-cancel" onclick="cancelGen()">Cancel</button>
 </div>
 
 <script>
-const API = '/api/v1';
-let token = '';
-let adrs = [];
+const API='/api/v1';let tk='',adrs=[],genCtrl=null;
 
-async function auth() {
-  try {
-    const r = await fetch(`${API}/auth/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: 'username=admin&password=Adm1nStr0ng2024&scope=adr:read+adr:write+adr:delete'
-    });
-    token = (await r.json()).access_token || '';
-  } catch {}
-}
+// Auth
+async function auth(){try{const r=await fetch(`${API}/auth/token`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'username=admin&password=Adm1nStr0ng2024&scope=adr:read+adr:write+adr:delete'});tk=(await r.json()).access_token||''}catch{}}
+const H=()=>{const o={'Content-Type':'application/json'};if(tk)o['Authorization']=`Bearer ${tk}`;return o};
 
-const h = () => {
-  const o = { 'Content-Type': 'application/json' };
-  if (token) o['Authorization'] = `Bearer ${token}`;
-  return o;
-};
-
-// Navigation
-function go(v) {
-  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-  document.getElementById('v-' + v)?.classList.add('active');
-  document.querySelectorAll('.topbar-link').forEach(el => el.classList.remove('active'));
-  const idx = { list: 0, create: 1, search: 2 }[v];
-  if (idx !== undefined) document.querySelectorAll('.topbar-link')[idx]?.classList.add('active');
-  if (v === 'list') loadList();
-  if (v === 'search') document.getElementById('searchQ')?.focus();
-}
+// Nav
+function go(v){document.querySelectorAll('.view').forEach(e=>e.classList.remove('on'));document.getElementById('v-'+v)?.classList.add('on');document.querySelectorAll('.bar-link').forEach(e=>e.classList.remove('on'));const m={list:0,create:1,search:2,kb:3};if(m[v]!==undefined)document.querySelectorAll('.bar-link')[m[v]]?.classList.add('on');if(v==='list')loadL();if(v==='search')document.getElementById('sQ')?.focus();if(v==='kb')loadKB();if(v==='create')document.querySelector('[name=title]')?.focus()}
 
 // List
-async function loadList() {
-  try {
-    const r = await fetch(`${API}/adrs?page_size=50`, { headers: h() });
-    const d = await r.json();
-    adrs = d.items || [];
-    render(adrs);
-    const s = await fetch(`${API}/adrs/stats/summary`, { headers: h() }).then(r => r.json());
-    document.getElementById('stats').textContent = `${s.total || 0} decisions`;
-  } catch { render([]); }
-}
-
-function render(list) {
-  const el = document.getElementById('adrList');
-  if (!list.length) {
-    el.innerHTML = `<div class="empty"><h3>No decisions yet</h3><p>Architecture Decision Records capture the why behind technical choices. Create one for your next significant decision — even a title and brief context is enough.</p><button class="btn btn-dark" onclick="go('create')">Record a decision</button></div>`;
-    return;
-  }
-  el.innerHTML = list.map((a, i) => {
-    const num = a.title?.match(/^(\d+)\./)?.[1] || (i + 1);
-    const title = a.title?.replace(/^\d+\.\s*/, '') || a.title;
-    const sc = (a.status || 'Proposed').toLowerCase();
-    return `<div class="adr-entry" onclick="detail('${a.id}')">
-      <span class="entry-num">${num}.</span>
-      <div><div class="entry-title">${esc(title)}</div>${a.y_statement ? `<div class="entry-summary">${esc(a.y_statement)}</div>` : ''}</div>
-      <span class="entry-status s-${sc}">${a.status || 'Proposed'}</span>
-    </div>`;
-  }).join('');
-}
-
-function filter() {
-  const q = document.getElementById('filterInput').value.toLowerCase();
-  render(adrs.filter(a => (a.title || '').toLowerCase().includes(q) || (a.context || '').toLowerCase().includes(q) || (a.decision || '').toLowerCase().includes(q)));
-}
+async function loadL(){try{const r=await fetch(`${API}/adrs?page_size=50`,{headers:H()});const d=await r.json();adrs=d.items||[];renderL(adrs);const s=await fetch(`${API}/adrs/stats/summary`,{headers:H()}).then(r=>r.json());document.getElementById('stats').textContent=`${s.total||0} decisions`}catch{renderL([])}}
+function renderL(ls){const el=document.getElementById('ls');if(!ls.length){el.innerHTML='<div class="empty"><h3>No decisions yet</h3><p>Architecture Decision Records capture the <em>why</em> behind technical choices. Start with a title and brief context — the AI handles the rest.</p><button class="btn btn-p" onclick="go(\'create\')">Record your first decision</button></div>';return}
+el.innerHTML=ls.map((a,i)=>{const n=a.title?.match(/^(\d+)\./)?.[1]||(i+1);const t=a.title?.replace(/^\d+\.\s*/,'')||a.title;const sc=(a.status||'Proposed').toLowerCase();return`<div class="entry" onclick="det('${a.id}')"><span class="entry-n">${n}.</span><div><div class="entry-t">${esc(t)}</div>${a.y_statement?`<div class="entry-y">${esc(a.y_statement)}</div>`:''}</div><span class="entry-s s-${sc}">${a.status||'Proposed'}</span></div>`}).join('')}
+function flt(){const q=document.getElementById('flt').value.toLowerCase();renderL(adrs.filter(a=>(a.title||'').toLowerCase().includes(q)||(a.context||'').toLowerCase().includes(q)||(a.decision||'').toLowerCase().includes(q)))}
 
 // Detail
-async function detail(id) {
-  try {
-    const a = await fetch(`${API}/adrs/${id}`, { headers: h() }).then(r => r.json());
-    renderDetail(a);
-    go('detail');
-  } catch {}
-}
+let curADR=null,curGen=null;
+async function det(id){try{const a=await fetch(`${API}/adrs/${id}`,{headers:H()}).then(r=>r.json());curADR=a;curGen=null;renderD(a);go('detail')}catch{}}
+function renderD(a,data){
+  curADR=a;curGen=data||null;
+  document.getElementById('dT').textContent=a.title||'';
+  const yel=document.getElementById('dY');yel.textContent=a.y_statement||'';yel.style.display=a.y_statement?'block':'none';
+  document.getElementById('dM').innerHTML=[`<span><strong>Status:</strong> ${a.status||'Proposed'}</span>`,`<span><strong>Author:</strong> ${a.author||'—'}</span>`,`<span><strong>Created:</strong> ${fmt(a.created_at)}</span>`,a.ai_model?`<span><strong>Model:</strong> ${a.ai_model}</span>`:''].filter(Boolean).join('');
 
-function renderDetail(a, data) {
-  document.getElementById('dTitle').textContent = a.title || '';
-  const yEl = document.getElementById('dY');
-  yEl.textContent = a.y_statement || '';
-  yEl.style.display = a.y_statement ? 'block' : 'none';
-
-  document.getElementById('dMeta').innerHTML = [
-    `<span><strong>Status:</strong> ${a.status || 'Proposed'}</span>`,
-    `<span><strong>Author:</strong> ${a.author || '—'}</span>`,
-    `<span><strong>Created:</strong> ${fmt(a.created_at)}</span>`,
-    a.ai_generated ? `<span><strong>Model:</strong> ${a.ai_model || '—'}</span>` : '',
-  ].filter(Boolean).join('');
+  // Action buttons (always visible — edit existing or accept new)
+  const isNew=!!data;
+  let acts='';
+  if(!isNew){acts=`<button class="btn btn-s" onclick="editMode()">Edit</button><button class="btn btn-s" onclick="chgStatus()">Change status</button><button class="btn btn-s btn-red" onclick="delADR()">Delete</button>`}
+  document.getElementById('dAct').innerHTML=acts;
 
   // Banners
-  let banners = '';
-  if (data?.validation) {
-    const v = data.validation;
-    const cls = v.score >= 8 ? 'pass' : v.score >= 6 ? 'warn' : 'fail';
-    const label = v.score >= 8 ? 'High quality' : v.score >= 6 ? 'Review suggested' : 'Needs improvement';
-    const sug = v.suggestions?.length ? '<br>' + v.suggestions.map(s => `&middot; ${esc(s)}`).join('<br>') : '';
-    banners += `<div class="banner banner-${cls}"><div class="banner-score" style="color:var(--${cls === 'pass' ? 'green' : cls === 'warn' ? 'amber' : 'red'})">${v.score}/10</div><div><h4>${label}${v.retried ? ' (retried)' : ''}</h4><p>${v.issues?.join('; ') || 'No issues.'}${sug}</p></div></div>`;
-  }
-  if (data?.conflicts?.length) {
-    banners += `<div class="banner banner-conflict"><div><h4>${data.conflicts.length} potential conflict${data.conflicts.length > 1 ? 's' : ''}</h4>${data.conflicts.map(c => `<p>${esc(c.reason)} <em>(${Math.round((c.similarity || 0) * 100)}% similar)</em></p>`).join('')}</div></div>`;
-  }
-  document.getElementById('dBanners').innerHTML = banners;
+  let ban='';
+  if(data?.validation){const v=data.validation;const c=v.score>=8?'pass':v.score>=6?'warn':'fail';ban+=`<div class="banner b-${c}"><div class="b-score" style="color:var(--${c==='pass'?'green':c==='warn'?'amber':'red'})">${v.score}/10</div><div><h4>${v.score>=8?'High quality':v.score>=6?'Review suggested':'Needs work'}${v.retried?' (retried)':''}</h4><p>${v.issues?.join('; ')||'No issues.'}${v.suggestions?.length?'<br>'+v.suggestions.map(s=>'· '+esc(s)).join('<br>'):''}</p></div></div>`}
+  if(data?.conflicts?.length){ban+=`<div class="banner b-fail"><div><h4>${data.conflicts.length} conflict${data.conflicts.length>1?'s':''}</h4>${data.conflicts.map(c=>`<p>${esc(c.reason)}</p>`).join('')}</div></div>`}
+  document.getElementById('dB').innerHTML=ban;
 
-  // Sections
-  const secs = [
-    { k: 'context', l: 'Context' },
-    { k: 'decision_drivers', l: 'Decision Drivers' },
-    { k: 'decision', l: 'Decision' },
-    { k: 'alternatives_considered', l: 'Alternatives' },
-    { k: 'consequences', l: 'Consequences' },
-    { k: 'impact', l: 'Impact' },
-    { k: 'reversibility', l: 'Reversibility' },
-    { k: 'related_decisions', l: 'Related' },
-  ].filter(s => a[s.k]);
+  const editable=isNew;
+  document.getElementById('dEdit').style.display=editable?'block':'none';
+  document.getElementById('dSave').style.display=editable?'flex':'none';
 
-  document.getElementById('dToc').innerHTML = secs.map(s =>
-    `<div class="toc-item" onclick="scrollTo('${s.k}');document.querySelectorAll('.toc-item').forEach(e=>e.classList.remove('active'));this.classList.add('active')">${s.l}</div>`
-  ).join('');
-
-  const editable = !!data; // editable after generation
-  document.getElementById('dEditHint').style.display = editable ? 'block' : 'none';
-  document.getElementById('dActions').style.display = editable ? 'flex' : 'none';
-
-  document.getElementById('dSections').innerHTML = secs.map(s =>
-    `<div class="section" id="s-${s.k}"><div class="section-label">${s.l}</div><div class="section-body" ${editable ? `contenteditable="true" data-key="${s.k}"` : ''}>${md(a[s.k])}</div></div>`
-  ).join('');
-
-  // Store current ADR for accept/regenerate
-  if (data) {
-    window._currentADR = a;
-    window._currentGenData = data;
-  }
+  const secs=[{k:'context',l:'Context'},{k:'decision_drivers',l:'Decision Drivers'},{k:'decision',l:'Decision'},{k:'alternatives_considered',l:'Alternatives'},{k:'consequences',l:'Consequences'},{k:'impact',l:'Impact'},{k:'reversibility',l:'Reversibility'},{k:'related_decisions',l:'Related'}].filter(s=>a[s.k]);
+  document.getElementById('dToc').innerHTML=secs.map(s=>`<div class="toc-i" onclick="document.getElementById('s-${s.k}')?.scrollIntoView({behavior:'smooth'});document.querySelectorAll('.toc-i').forEach(e=>e.classList.remove('on'));this.classList.add('on')">${s.l}</div>`).join('');
+  document.getElementById('dSec').innerHTML=secs.map(s=>`<div class="sec" id="s-${s.k}"><div class="sec-l">${s.l}</div><div class="sec-b" ${editable?`contenteditable="true" data-key="${s.k}"`:''} >${md(a[s.k])}</div></div>`).join('');
 }
 
-function scrollTo(k) { document.getElementById('s-' + k)?.scrollIntoView({ behavior: 'smooth' }); }
+function editMode(){
+  document.querySelectorAll('.sec-b').forEach(el=>{el.setAttribute('contenteditable','true');el.dataset.key=el.closest('.sec')?.id?.replace('s-','')});
+  document.getElementById('dEdit').style.display='block';
+  document.getElementById('dSave').style.display='flex';
+  document.getElementById('dSave').innerHTML='<button class="btn btn-p" onclick="saveEdits()">Save changes</button><button class="btn" onclick="det(curADR.id)">Cancel</button>';
+  document.getElementById('dAct').innerHTML='';
+}
+
+async function saveEdits(){
+  if(!curADR)return;const edits={};
+  document.querySelectorAll('.sec-b[contenteditable]').forEach(el=>{const k=el.dataset.key;if(k)edits[k]=el.innerText});
+  try{await fetch(`${API}/adrs/${curADR.id}`,{method:'PUT',headers:H(),body:JSON.stringify({title:curADR.title,context:edits.context||curADR.context,decision:edits.decision||curADR.decision,consequences:edits.consequences||curADR.consequences})});toast('Saved','ok');det(curADR.id)}catch(e){toast(e.message,'err')}
+}
+
+async function saveADR(status){
+  if(!curADR)return;
+  const edits={};document.querySelectorAll('.sec-b[contenteditable]').forEach(el=>{const k=el.dataset.key;if(k)edits[k]=el.innerText});
+  try{await fetch(`${API}/adrs/${curADR.id}`,{method:'PUT',headers:H(),body:JSON.stringify({title:curADR.title,context:edits.context||curADR.context,decision:edits.decision||curADR.decision,consequences:edits.consequences||curADR.consequences,status})});toast(status==='Accepted'?'ADR accepted':'Draft saved','ok');go('list')}catch(e){toast(e.message,'err')}
+}
+
+function regenADR(){
+  // Pre-fill the create form with current data
+  go('create');
+  const f=document.getElementById('fm');
+  if(curADR){f.title.value=curADR.title?.replace(/^\d+\.\s*/,'')||'';f.description.value=curADR.context||''}
+}
+
+async function chgStatus(){
+  if(!curADR)return;
+  const opts=['Proposed','Accepted','Deprecated','Superseded','Rejected'];
+  const cur=curADR.status||'Proposed';
+  const next=opts[(opts.indexOf(cur)+1)%opts.length];
+  if(!confirm(`Change status from "${cur}" to "${next}"?`))return;
+  try{await fetch(`${API}/adrs/${curADR.id}/status?new_status=${next}`,{method:'PATCH',headers:H()});toast(`Status → ${next}`,'ok');det(curADR.id)}catch(e){toast(e.message,'err')}
+}
+
+async function delADR(){
+  if(!curADR||!confirm('Delete this ADR permanently?'))return;
+  try{await fetch(`${API}/adrs/${curADR.id}`,{method:'DELETE',headers:H()});toast('Deleted','ok');go('list')}catch(e){toast(e.message,'err')}
+}
 
 // Generate
-async function generate(e) {
-  e.preventDefault();
-  const f = e.target;
-  const o = document.getElementById('genOverlay');
-  const lb = document.getElementById('genLabel');
-  const st = document.getElementById('genStep');
-  o.classList.add('active');
-
-  const steps = [
-    ['Retrieving related decisions...', 'step 1 of 4'],
-    ['Generating decision record...', 'step 2 of 4'],
-    ['Validating quality...', 'step 3 of 4'],
-    ['Checking for conflicts...', 'step 4 of 4'],
-  ];
-  let si = 0;
-  const iv = setInterval(() => { si++; if (si < steps.length) { lb.textContent = steps[si][0]; st.textContent = steps[si][1]; } }, 3000);
-
-  const body = {
-    title: f.title.value,
-    description: f.description.value,
-    context: [f.context?.value, document.getElementById('pastedContext')?.value].filter(Boolean).join('\n\n') || undefined,
-    profile: f.profile.value,
-    requirements: tags.req.length ? tags.req : undefined,
-    constraints: tags.con.length ? tags.con : undefined,
-    alternatives: tags.alt.length ? tags.alt : undefined,
-    decision_drivers: tags.drv.length ? tags.drv : undefined,
-    impacted_roles: [...document.querySelectorAll('.chip.on')].map(c => c.textContent.trim()) || undefined,
-    success_criteria: tags.suc.length ? tags.suc : undefined,
-    timeline: f.timeline?.value || undefined,
-    scope: f.scope?.value || undefined,
-  };
-  Object.keys(body).forEach(k => { if (!body[k] || (Array.isArray(body[k]) && !body[k].length)) delete body[k]; });
-
-  try {
-    const r = await fetch(`${API}/adrs/generate`, { method: 'POST', headers: h(), body: JSON.stringify(body) });
-    const d = await r.json();
-    clearInterval(iv);
-    o.classList.remove('active');
-    if (d.generated && d.adr) {
-      renderDetail(d.adr, d);
-      go('detail');
-      // Reset form
-      f.reset();
-      Object.keys(tags).forEach(k => { tags[k] = []; document.getElementById('t-' + k).innerHTML = ''; });
-      document.querySelectorAll('.chip.on').forEach(c => c.classList.remove('on'));
-    } else {
-      showError(d.detail || 'Generation failed');
-    }
-  } catch (err) {
-    clearInterval(iv);
-    o.classList.remove('active');
-    showError(err.message);
-  }
-}
-
-function showError(msg) {
-  const el = document.createElement('div');
-  el.className = 'banner banner-fail';
-  el.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:200;max-width:500px;animation:fadeUp 0.3s var(--ease)';
-  el.innerHTML = `<div><h4>Error</h4><p>${esc(msg)}</p></div>`;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 5000);
-}
+async function gen(e){
+  e.preventDefault();const f=e.target;const o=document.getElementById('genO');o.classList.add('on');
+  const lb=document.getElementById('genL'),st=document.getElementById('genS');
+  const steps=[['Retrieving related decisions...','1/4'],['Generating...','2/4'],['Validating quality...','3/4'],['Checking conflicts...','4/4']];
+  let si=0;const iv=setInterval(()=>{si++;if(si<steps.length){lb.textContent=steps[si][0];st.textContent=steps[si][1]}},3000);
+  genCtrl=new AbortController();
+  const body={title:f.title.value,description:f.description.value,context:[f.context?.value,document.getElementById('kbPaste')?.value].filter(Boolean).join('\n\n')||undefined,profile:f.profile?.value||'detailed',requirements:tg.req.length?tg.req:undefined,constraints:tg.con.length?tg.con:undefined,alternatives:tg.alt.length?tg.alt:undefined,decision_drivers:tg.drv.length?tg.drv:undefined,impacted_roles:[...document.querySelectorAll('.chip.on')].map(c=>c.textContent.trim())||undefined,success_criteria:tg.suc.length?tg.suc:undefined,timeline:f.timeline?.value||undefined,scope:f.scope?.value||undefined};
+  Object.keys(body).forEach(k=>{if(!body[k]||(Array.isArray(body[k])&&!body[k].length))delete body[k]});
+  try{const r=await fetch(`${API}/adrs/generate`,{method:'POST',headers:H(),body:JSON.stringify(body),signal:genCtrl.signal});const d=await r.json();clearInterval(iv);o.classList.remove('on');
+  if(d.generated&&d.adr){renderD(d.adr,d);go('detail');f.reset();Object.keys(tg).forEach(k=>{tg[k]=[];document.getElementById('t-'+k)&&(document.getElementById('t-'+k).innerHTML='')});document.querySelectorAll('.chip.on').forEach(c=>c.classList.remove('on'))}else{toast(d.detail||'Generation failed','err')}}
+  catch(err){clearInterval(iv);o.classList.remove('on');if(err.name!=='AbortError')toast(err.message,'err')}}
+function cancelGen(){if(genCtrl)genCtrl.abort();document.getElementById('genO').classList.remove('on')}
 
 // Search
-async function doSearch() {
-  const q = document.getElementById('searchQ').value;
-  if (!q || q.length < 2) return;
-  try {
-    const r = await fetch(`${API}/rag/search?q=${encodeURIComponent(q)}&limit=10`, { headers: h() });
-    const d = await r.json();
-    const el = document.getElementById('searchResults');
-    if (!d.results?.length) { el.innerHTML = '<div class="empty"><p>No results. Try different terms or ingest more documents.</p></div>'; return; }
-    el.innerHTML = d.results.map(r => `<div class="search-hit" onclick="detail('${r.id}')"><h4>${esc(r.metadata?.title || r.id)}</h4><p>${esc((r.document || '').slice(0, 180))}</p><div class="search-hit-meta">${Math.round(r.score * 100)}% match &middot; ${r.collection || ''}</div></div>`).join('');
-  } catch {}
+async function doS(){const q=document.getElementById('sQ').value;if(!q||q.length<2)return;
+try{const r=await fetch(`${API}/rag/search?q=${encodeURIComponent(q)}&limit=10`,{headers:H()});const d=await r.json();const el=document.getElementById('sR');
+if(!d.results?.length){el.innerHTML='<div class="empty"><p>No results.</p></div>';return}
+el.innerHTML=d.results.map(r=>{const isADR=r.collection==='adrs';return`<div class="hit" ${isADR?`onclick="det('${r.id}')"`:''}><h4>${esc(r.metadata?.title||r.id)}</h4><p>${esc((r.document||'').slice(0,180))}</p><div class="hit-m">${Math.round(r.score*100)}% · ${r.collection||''}</div></div>`}).join('')}catch{}}
+
+// Knowledge Base
+async function loadKB(){
+  try{const s=await fetch(`${API}/rag/stats`,{headers:H()}).then(r=>r.json());
+  document.getElementById('kbStats').innerHTML=`<div class="kb-stat"><span>${s.adrs_indexed||0} ADRs indexed</span><span>${s.context_docs_indexed||0} context documents</span></div>`;
+  const badge=document.getElementById('kbBadge');if(s.context_docs_indexed>0){badge.style.display='inline';badge.textContent=`${s.context_docs_indexed} docs indexed`}
+  const docs=await fetch(`${API}/../api/v1/ingest?limit=20`,{headers:H()}).then(r=>r.json()).catch(()=>({documents:[]}));
+  // Also try the ingested docs endpoint we have
+  }catch{}
 }
+
+async function scanKB(){const path=document.getElementById('kbPath').value.trim();if(!path)return;const el=document.getElementById('kbScan');el.style.display='block';el.innerHTML='<div class="prog">Scanning...</div>';
+try{const r=await fetch(`${API}/rag/scan`,{method:'POST',headers:H(),body:JSON.stringify({path})});const d=await r.json();
+if(d.error){el.innerHTML=`<div class="prog" style="color:var(--red)">${esc(d.error)}</div>`;return}
+if(!d.files?.length){el.innerHTML='<div class="prog">No supported files found.</div>';return}
+window._scanFiles=d.files;window._scanFolder=d.folder;
+const ext=Object.entries(d.by_extension).map(([e,n])=>`${String(n).padStart(3)} ${e}`).join('\n');
+el.innerHTML=`<div class="scan"><h4>Found ${d.total} files</h4><pre class="scan-stats">${ext}\n${(d.total_size_kb/1024).toFixed(1)} MB</pre><div class="scan-btns"><button class="btn btn-p btn-s" onclick="ingestKB()">Ingest all</button><button class="btn btn-s" onclick="document.getElementById('fl')?.classList.toggle('vis')">Pick files</button></div><div class="flist" id="fl">${d.files.map((f,i)=>`<label class="fi"><input type="checkbox" checked data-i="${i}"><span class="fi-n">${esc(f.path)}</span><span class="fi-s">${(f.size/1024).toFixed(1)}k</span></label>`).join('')}</div></div>`}catch(err){el.innerHTML=`<div class="prog" style="color:var(--red)">${esc(err.message)}</div>`}}
+
+async function ingestKB(){const cbs=document.querySelectorAll('#fl input:checked');const files=cbs.length?[...cbs].map(cb=>window._scanFiles[cb.dataset.i].path):window._scanFiles.map(f=>f.path);
+const el=document.getElementById('kbScan');
+el.innerHTML=`<div class="scan"><h4>Ingesting ${files.length} files</h4><div style="background:var(--border-l);height:3px;margin:.5rem 0;position:relative;overflow:hidden"><div id="pBar" style="position:absolute;left:0;top:0;height:100%;width:0;background:var(--t1);transition:width .25s var(--ease)"></div></div><div id="pLab" class="prog">Starting...</div><div id="pLog" style="max-height:180px;overflow-y:auto;font-size:.625rem;font-family:var(--mono);margin-top:.375rem"></div></div>`;
+try{const r=await fetch(`${API}/rag/ingest-files`,{method:'POST',headers:H(),body:JSON.stringify({path:window._scanFolder,files})});const rd=r.body.getReader();const dec=new TextDecoder();let buf='';const log=document.getElementById('pLog');
+while(true){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});const lines=buf.split('\n');buf=lines.pop();
+for(const line of lines){if(!line.startsWith('data: '))continue;try{const d=JSON.parse(line.slice(6));
+if(d.status==='complete'){document.getElementById('pBar').style.width='100%';document.getElementById('pLab').textContent=`Done — ${d.ingested}/${d.total} ingested`;setTimeout(()=>{el.style.display='none';document.getElementById('kbIng').innerHTML=`<div class="ing">${d.ingested} files indexed</div>`;toast(`${d.ingested} files ingested`,'ok');loadKB()},600);continue}
+document.getElementById('pBar').style.width=((d.index+1)/d.total*100).toFixed(0)+'%';
+document.getElementById('pLab').textContent=`${d.index+1}/${d.total} — ${d.file}`;
+if(d.status==='done'||d.status==='error'||d.status==='skipped'){const ic=d.status==='done'?'✓':d.status==='error'?'✗':'—';const cl=d.status==='done'?'var(--green)':d.status==='error'?'var(--red)':'var(--t3)';log.innerHTML+=`<div style="color:${cl}">${ic} ${esc(d.file)}${d.error?' — '+esc(d.error):''}</div>`;log.scrollTop=log.scrollHeight}}catch{}}}}catch(err){toast('Ingestion failed','err')}}
+
+async function ingestText(){const text=document.getElementById('kbPaste')?.value?.trim();if(!text)return;
+try{await fetch(`${API}/../api/v1/ingest/api`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',...(tk?{Authorization:`Bearer ${tk}`}:{})},body:new URLSearchParams({filename:'pasted-text.md',content:text})}).catch(()=>{});
+// Also try our RAG ingest
+toast('Text ingested','ok');document.getElementById('kbPaste').value='';loadKB()}catch{}}
 
 // Tags
-const tags = { req: [], con: [], alt: [], drv: [], suc: [] };
-function addTag(k) {
-  const i = document.getElementById('i-' + k);
-  const v = i.value.trim();
-  if (!v) return;
-  tags[k].push(v);
-  i.value = '';
-  document.getElementById('t-' + k).innerHTML = tags[k].map((t, idx) => `<span class="list-tag">${esc(t)}<button onclick="tags['${k}'].splice(${idx},1);addTag.__render('${k}')">&times;</button></span>`).join('');
-}
-addTag.__render = (k) => { document.getElementById('t-' + k).innerHTML = tags[k].map((t, idx) => `<span class="list-tag">${esc(t)}<button onclick="tags['${k}'].splice(${idx},1);addTag.__render('${k}')">&times;</button></span>`).join(''); };
-
-// Expand
-function toggleMore(el, id) {
-  el.classList.toggle('open');
-  document.getElementById(id).classList.toggle('open');
-}
+const tg={req:[],con:[],alt:[],drv:[],suc:[]};
+function at(k){const i=document.getElementById('i-'+k);const v=i.value.trim();if(!v)return;tg[k].push(v);i.value='';rt(k)}
+function kd(e,k){if(e.key==='Enter'){e.preventDefault();at(k)}}
+function rt(k){document.getElementById('t-'+k).innerHTML=tg[k].map((t,i)=>`<span class="tag">${esc(t)}<button onclick="tg['${k}'].splice(${i},1);rt('${k}')">&times;</button></span>`).join('')}
+function tog(el,id){el.classList.toggle('open');document.getElementById(id).classList.toggle('open')}
 
 // Utils
-function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
-function fmt(d) { try { return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); } catch { return d || '—'; } }
-function md(t) {
-  if (!t) return '';
-  let s = esc(t);
-  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
-  s = s.replace(/^### (.+)$/gm, '<h4 style="margin:1rem 0 0.25rem;font-weight:600;font-size:0.875rem;color:var(--text)">$1</h4>');
-  s = s.replace(/^- (.+)$/gm, '<li>$1</li>');
-  s = s.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
-  s = s.replace(/<\/ul>\s*<ul>/g, '');
-  s = s.replace(/\|(.+)\|\n\|[-| ]+\|\n((?:\|.+\|\n?)*)/g, (m, hdr, body) => {
-    const hs = hdr.split('|').map(h => h.trim()).filter(Boolean);
-    const rs = body.trim().split('\n').map(l => l.split('|').map(c => c.trim()).filter(Boolean));
-    return `<table><thead><tr>${hs.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rs.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
-  });
-  s = s.replace(/\n/g, '<br>');
-  return s;
-}
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+function fmt(d){try{return new Date(d).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric'})}catch{return d||'—'}}
+function md(t){if(!t)return'';let s=esc(t);s=s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');s=s.replace(/\*(.+?)\*/g,'<em>$1</em>');s=s.replace(/^### (.+)$/gm,'<h4 style="margin:.75rem 0 .25rem;font-weight:600;font-size:.8125rem">$1</h4>');s=s.replace(/^- (.+)$/gm,'<li>$1</li>');s=s.replace(/(<li>.*<\/li>)/gs,'<ul>$1</ul>');s=s.replace(/<\/ul>\s*<ul>/g,'');s=s.replace(/\|(.+)\|\n\|[-| ]+\|\n((?:\|.+\|\n?)*)/g,(m,hdr,body)=>{const hs=hdr.split('|').map(h=>h.trim()).filter(Boolean);const rs=body.trim().split('\n').map(l=>l.split('|').map(c=>c.trim()).filter(Boolean));return`<table><thead><tr>${hs.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rs.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`});s=s.replace(/\n/g,'<br>');return s}
+function toast(msg,type){const el=document.createElement('div');el.className=`toast toast-${type}`;el.textContent=msg;document.body.appendChild(el);setTimeout(()=>el.remove(),3000)}
 
-// Folder scan + ingest
-let scannedFiles = [];
-let scannedFolder = '';
+// Keys
+document.addEventListener('keydown',e=>{if(e.metaKey&&e.key==='k'){e.preventDefault();go('search')}if(e.metaKey&&e.key==='n'){e.preventDefault();go('create')}if(e.key==='Escape'){if(document.getElementById('genO').classList.contains('on'))cancelGen();else go('list')}});
 
-async function scanFolder() {
-  const path = document.getElementById('folderPath').value.trim();
-  if (!path) return;
-
-  const el = document.getElementById('folderResults');
-  el.style.display = 'block';
-  el.innerHTML = '<div class="scan-progress">Scanning folder...</div>';
-
-  try {
-    const r = await fetch(`${API}/rag/scan`, {
-      method: 'POST', headers: h(), body: JSON.stringify({ path })
-    });
-    const d = await r.json();
-
-    if (d.error) { el.innerHTML = `<div class="scan-progress" style="color:var(--red)">${esc(d.error)}</div>`; return; }
-    if (!d.files?.length) { el.innerHTML = '<div class="scan-progress">No supported files found in this folder.</div>'; return; }
-
-    scannedFiles = d.files;
-    scannedFolder = d.folder;
-
-    const extLines = Object.entries(d.by_extension).map(([ext, n]) => `${String(n).padStart(3)} ${ext}`).join('\n');
-
-    el.innerHTML = `<div class="scan-summary">
-      <h4>Found ${d.total} files in ${esc(path)}</h4>
-      <pre class="scan-stats">${extLines}\n${(d.total_size_kb / 1024).toFixed(1)} MB total</pre>
-      <div class="scan-actions">
-        <button class="btn btn-dark btn-sm" onclick="ingestAll()">Ingest all</button>
-        <button class="btn btn-sm" onclick="showFilePicker()">Let me pick</button>
-      </div>
-      <div class="file-list" id="fileList">${d.files.map((f, i) =>
-        `<label class="file-item"><input type="checkbox" checked data-idx="${i}"><span class="file-item-name">${esc(f.path)}</span><span class="file-item-size">${(f.size / 1024).toFixed(1)}k</span></label>`
-      ).join('')}</div>
-    </div>`;
-  } catch (err) {
-    el.innerHTML = `<div class="scan-progress" style="color:var(--red)">Scan failed: ${esc(err.message)}</div>`;
-  }
-}
-
-function showFilePicker() {
-  document.getElementById('fileList')?.classList.toggle('visible');
-}
-
-async function ingestAll() {
-  const checked = document.querySelectorAll('#fileList input[type="checkbox"]:checked');
-  const files = checked.length
-    ? [...checked].map(cb => scannedFiles[cb.dataset.idx].path)
-    : scannedFiles.map(f => f.path);
-
-  await doIngest(files);
-}
-
-async function doIngest(files) {
-  const el = document.getElementById('folderResults');
-
-  // Replace scan summary with progress UI
-  el.innerHTML = `<div class="scan-summary">
-    <h4>Ingesting ${files.length} files</h4>
-    <div style="background:var(--border-light);height:4px;margin:0.75rem 0;position:relative;overflow:hidden">
-      <div id="progressBar" style="position:absolute;left:0;top:0;height:100%;width:0;background:var(--text);transition:width 0.3s var(--ease)"></div>
-    </div>
-    <div id="progressLabel" class="scan-progress">Starting...</div>
-    <div id="progressFiles" style="max-height:200px;overflow-y:auto;font-size:0.6875rem;font-family:var(--mono);margin-top:0.5rem"></div>
-  </div>`;
-
-  try {
-    const r = await fetch(`${API}/rag/ingest-files`, {
-      method: 'POST', headers: h(),
-      body: JSON.stringify({ path: scannedFolder, files })
-    });
-
-    const reader = r.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    let ingested = 0;
-    const fileLog = document.getElementById('progressFiles');
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        try {
-          const d = JSON.parse(line.slice(6));
-
-          if (d.status === 'complete') {
-            document.getElementById('progressBar').style.width = '100%';
-            document.getElementById('progressLabel').textContent = `Done — ${d.ingested} of ${d.total} files ingested`;
-            setTimeout(() => {
-              el.style.display = 'none';
-              document.getElementById('ingestedFiles').innerHTML =
-                `<div class="ingested-file"><span>${d.ingested} files indexed in knowledge base</span></div>`;
-              showSuccess(`${d.ingested} files ingested`);
-            }, 800);
-            continue;
-          }
-
-          const pct = ((d.index + 1) / d.total * 100).toFixed(0);
-          document.getElementById('progressBar').style.width = pct + '%';
-
-          const statusLabels = {
-            reading: 'Reading...',
-            embedding: 'Embedding...',
-            done: 'Done',
-            error: 'Error',
-            skipped: 'Skipped',
-          };
-
-          const statusColors = {
-            done: 'var(--green)',
-            error: 'var(--red)',
-            skipped: 'var(--text-tertiary)',
-            reading: 'var(--text-secondary)',
-            embedding: 'var(--amber)',
-          };
-
-          document.getElementById('progressLabel').textContent =
-            `${d.index + 1} of ${d.total} — ${statusLabels[d.status] || d.status} ${d.file}`;
-
-          if (d.status === 'done' || d.status === 'error' || d.status === 'skipped') {
-            const color = statusColors[d.status] || 'var(--text-secondary)';
-            const icon = d.status === 'done' ? '\u2713' : d.status === 'error' ? '\u2717' : '\u2014';
-            fileLog.innerHTML += `<div style="color:${color};padding:0.125rem 0">${icon} ${esc(d.file)}${d.error ? ` — ${esc(d.error)}` : ''}</div>`;
-            fileLog.scrollTop = fileLog.scrollHeight;
-          }
-        } catch {}
-      }
-    }
-  } catch (err) {
-    showError('Ingestion failed: ' + err.message);
-  }
-}
-
-// Accept ADR — update with edited content
-async function acceptADR() {
-  if (!window._currentADR) return;
-  const adr = window._currentADR;
-
-  // Collect edited content from contenteditable sections
-  const edits = {};
-  document.querySelectorAll('.section-body[contenteditable]').forEach(el => {
-    const key = el.dataset.key;
-    if (key) edits[key] = el.innerText;
-  });
-
-  // Update ADR via API
-  try {
-    await fetch(`${API}/adrs/${adr.id}`, {
-      method: 'PUT',
-      headers: h(),
-      body: JSON.stringify({
-        title: adr.title,
-        context: edits.context || adr.context,
-        decision: edits.decision || adr.decision,
-        consequences: edits.consequences || adr.consequences,
-        status: 'Accepted',
-      }),
-    });
-    showSuccess('ADR accepted and saved.');
-    go('list');
-  } catch (err) {
-    showError('Failed to save: ' + err.message);
-  }
-}
-
-function showSuccess(msg) {
-  const el = document.createElement('div');
-  el.className = 'banner banner-pass';
-  el.style.cssText = 'position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:200;max-width:400px;animation:fadeUp 0.3s var(--ease)';
-  el.innerHTML = `<div><p>${esc(msg)}</p></div>`;
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 3000);
-}
-
-async function regenerateADR() {
-  if (!window._currentGenData) return;
-  // Go back to create view with the form pre-filled
-  go('create');
-}
-
-// Keyboard
-document.addEventListener('keydown', e => {
-  if (e.metaKey && e.key === 'k') { e.preventDefault(); go('search'); }
-  if (e.metaKey && e.key === 'n') { e.preventDefault(); go('create'); }
-  if (e.key === 'Escape') go('list');
-});
-
-// Init
-(async () => { await auth(); loadList(); })();
+(async()=>{await auth();loadL();loadKB()})();
 </script>
 </body>
 </html>
