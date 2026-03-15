@@ -243,6 +243,14 @@ class ADRGenerator:
         rag_context = self._retrieve_rag_context(request)
         prompt = self._build_prompt(request, rag_context)
 
+        # Pass ADR count for sequential numbering
+        try:
+            from app.db.adr_store import get_next_number
+            next_num = get_next_number()
+            prompt += f"\n\nThis will be ADR number {next_num}. Use this number in the title."
+        except Exception:
+            pass
+
         if feedback:
             prompt += f"\n\n## Validator Feedback (improve these areas):\n{feedback}"
 
@@ -254,7 +262,7 @@ class ADRGenerator:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
-                max_tokens=3000,
+                max_tokens=4000,
                 response_format={"type": "json_object"}
             )
             content = response.choices[0].message.content

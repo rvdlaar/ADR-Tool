@@ -103,13 +103,19 @@ def validate_adr(generated_adr, constraints: Optional[List[str]] = None) -> ADRV
     elif len(consequences) > 3000:
         suggestions.append("Consequences are very long (> 3000 chars) — consider being more concise")
 
-    # Vague terms without nearby metrics
+    # Vague terms — only check decision/consequences/impact (not context, where vagueness is descriptive)
+    actionable_text = " ".join([
+        getattr(generated_adr, "decision", "") or "",
+        getattr(generated_adr, "consequences", "") or "",
+        getattr(generated_adr, "impact", "") or "",
+        getattr(generated_adr, "alternatives_considered", "") or "",
+    ])
     for pattern in VAGUE_TERMS:
-        matches = list(re.finditer(pattern, all_text, re.IGNORECASE))
+        matches = list(re.finditer(pattern, actionable_text, re.IGNORECASE))
         for match in matches:
             start = max(0, match.start() - 50)
-            end = min(len(all_text), match.end() + 50)
-            context_window = all_text[start:end]
+            end = min(len(actionable_text), match.end() + 50)
+            context_window = actionable_text[start:end]
             has_metric = any(re.search(mp, context_window, re.IGNORECASE) for mp in METRIC_PATTERNS)
             if not has_metric:
                 term = match.group()

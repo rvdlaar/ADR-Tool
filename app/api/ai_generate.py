@@ -55,10 +55,10 @@ async def generate_adr(
         # 3. Layer 2: If Layer 1 flags issues, use cheap LLM scoring
         if not validation.passed:
             llm_result = llm_validate_adr(generated, generator)
-            # Merge results
+            # Merge: take the LOWER score (conservative), combine suggestions
             validation.llm_validated = True
-            validation.score = llm_result.score
-            validation.passed = llm_result.passed
+            validation.score = min(validation.score, llm_result.score)
+            validation.passed = validation.score >= 7
             validation.suggestions.extend(llm_result.suggestions)
 
             # 4. Auto-retry if score < 7 (max 1 retry)
@@ -68,16 +68,16 @@ async def generate_adr(
                 validation = validate_adr(generated, constraints=request.constraints)
                 validation.retried = True
 
-        # 5. Conflict detection (free heuristic + optional cheap LLM)
+        # 5. Conflict detection (free heuristic + optional cheap LLM) (retried ADR may have different text)
         conflicts = detect_conflicts(generated)
         conflict_warning = None
         if conflicts:
-            conflict_warning = f"⚠ {len(conflicts)} potential conflict(s) with existing ADRs: " + \
+            conflict_warning = f"\u26a0 {len(conflicts)} potential conflict(s) with existing ADRs: " + \
                 "; ".join(c.get("reason", "") for c in conflicts[:3])
             generated.conflicts = conflicts
             generated.conflict_warning = conflict_warning
 
-        # 6. Store in SQLite
+        # 6. Store ALL sections in SQLite (including extended fields)
         adr = db_create(
             title=generated.title,
             context=generated.context,
@@ -87,19 +87,19 @@ async def generate_adr(
             tags=generated.tags,
             ai_generated=True,
             ai_model=generator.model,
+            y_statement=generated.y_statement,
+            decision_drivers=generated.decision_drivers,
+            alternatives_considered=generated.alternatives_considered,
+            impact=generated.impact,
+            reversibility=generated.reversibility,
+            related_decisions=generated.related_decisions,
         )
 
         # 7. Index in ChromaDB
         _index_adr(adr)
 
-        # 8. Build full ADR content for response (all sections)
+        # 8. Response uses the persisted ADR (all fields now in SQLite)
         full_adr = dict(adr)
-        full_adr["y_statement"] = generated.y_statement
-        full_adr["decision_drivers"] = generated.decision_drivers
-        full_adr["alternatives_considered"] = generated.alternatives_considered
-        full_adr["impact"] = generated.impact
-        full_adr["reversibility"] = generated.reversibility
-        full_adr["related_decisions"] = generated.related_decisions
 
         return GenerateResponse(
             generated=True,

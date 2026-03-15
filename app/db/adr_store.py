@@ -25,9 +25,15 @@ def init_db():
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
             status TEXT DEFAULT 'Proposed',
+            y_statement TEXT,
             context TEXT,
+            decision_drivers TEXT,
             decision TEXT,
+            alternatives_considered TEXT,
             consequences TEXT,
+            impact TEXT,
+            reversibility TEXT,
+            related_decisions TEXT,
             author TEXT,
             tags TEXT DEFAULT '[]',
             ai_generated INTEGER DEFAULT 0,
@@ -43,21 +49,33 @@ def init_db():
 
 
 def create_adr(title, context, decision, consequences, author=None,
-               tags=None, ai_generated=False, ai_model=None):
+               tags=None, ai_generated=False, ai_model=None,
+               y_statement=None, decision_drivers=None, alternatives_considered=None,
+               impact=None, reversibility=None, related_decisions=None):
     conn = _get_conn()
     adr_id = str(uuid.uuid4())[:8]
     now = datetime.utcnow().isoformat()
     conn.execute(
-        """INSERT INTO adrs (id, title, status, context, decision, consequences,
-           author, tags, ai_generated, ai_model, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-        (adr_id, title, "Proposed", context, decision, consequences,
-         author, json.dumps(tags or []), int(ai_generated), ai_model, now, now)
+        """INSERT INTO adrs (id, title, status, y_statement, context, decision_drivers,
+           decision, alternatives_considered, consequences, impact, reversibility,
+           related_decisions, author, tags, ai_generated, ai_model, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+        (adr_id, title, "Proposed", y_statement, context, decision_drivers,
+         decision, alternatives_considered, consequences, impact, reversibility,
+         related_decisions, author, json.dumps(tags or []), int(ai_generated), ai_model, now, now)
     )
     conn.commit()
     adr = get_adr(adr_id, _conn=conn)
     conn.close()
     return adr
+
+
+def get_next_number():
+    """Get the next ADR number for sequential numbering."""
+    conn = _get_conn()
+    total = conn.execute("SELECT COUNT(*) FROM adrs").fetchone()[0]
+    conn.close()
+    return total + 1
 
 
 def get_adr(adr_id, _conn=None):

@@ -111,18 +111,13 @@ def _heuristic_conflict_check(new_text: str, existing_text: str) -> Optional[str
 
 
 def _llm_conflict_check(new_decision: str, existing_decision: str, existing_title: str) -> Optional[str]:
-    """Cheap LLM check (~$0.001) — only called when heuristic flags a potential conflict."""
+    """Cheap LLM check (~$0.001) — reuses the generator's OpenAI client."""
     try:
-        from openai import OpenAI
-        api_key = os.getenv("AI_API_KEY", "")
-        if not api_key:
+        from app.services.ai_generator import get_generator
+        generator = get_generator()
+        if not generator.api_key:
             return None
-
-        client_kwargs = {"api_key": api_key}
-        base_url = os.getenv("AI_BASE_URL", "")
-        if base_url:
-            client_kwargs["base_url"] = base_url
-        client = OpenAI(**client_kwargs)
+        client = generator.client
 
         prompt = f"""Do these two architecture decisions conflict? Answer with JSON: {{"conflicts": true/false, "reason": "one line explanation"}}
 
@@ -133,7 +128,7 @@ Decision B (EXISTING: {existing_title}):
 {existing_decision[:500]}"""
 
         response = client.chat.completions.create(
-            model=os.getenv("AI_MODEL", "gpt-4o-mini"),
+            model=generator.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=100,
