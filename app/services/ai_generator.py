@@ -183,7 +183,29 @@ class ADRGenerator:
             "model": self.model,
         }
 
-        return template.format(**sections)
+        prompt = template.format(**sections)
+
+        # Inject organizational memory from learnings
+        try:
+            from app.db.adr_store import get_top_learnings
+            learnings = get_top_learnings(limit=10)
+            if learnings:
+                memory_block = "\n## Organizational Memory (learned from past corrections)\n"
+                for l in learnings:
+                    section_label = l.get("section") or "general"
+                    memory_block += f"- [{section_label}] {l['lesson']}\n"
+                prompt = prompt.replace(
+                    "Generate the ADR",
+                    memory_block + "\nGenerate the ADR",
+                    1,
+                )
+                # If no exact match for replacement, append before the input section
+                if memory_block not in prompt:
+                    prompt = memory_block + "\n" + prompt
+        except Exception:
+            pass  # Don't break generation if learnings retrieval fails
+
+        return prompt
 
     def _parse_response(self, content: str) -> GeneratedADR:
         try:

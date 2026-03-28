@@ -1,6 +1,9 @@
 """
 AI-powered ADR generation endpoints with validation, conflict detection, and review flow.
+Includes self-improving generation loop: snapshots, supervision, and learning injection.
 """
+import hashlib
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -8,7 +11,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from app.core.security import User, require_scopes
-from app.db.adr_store import create_adr as db_create, get_adr as db_get
+from app.db.adr_store import (
+    create_adr as db_create,
+    get_adr as db_get,
+    create_snapshot,
+    get_top_learnings,
+)
 from app.services.ai_generator import (
     ADRGenerationRequest,
     AIGenerationError,
@@ -16,6 +24,7 @@ from app.services.ai_generator import (
 )
 from app.services.adr_validator import validate_adr, llm_validate_adr, ADRValidationResult
 from app.services.conflict_detector import detect_conflicts
+from app.services.supervisor import supervise
 
 router = APIRouter(prefix="/adrs", tags=["AI ADR Generation"])
 
@@ -33,6 +42,8 @@ class GenerateResponse(BaseModel):
     review_required: bool = True
     message: str = ""
     warnings: list = []  # Non-blocking issues the user should know about
+    learnings_used: int = 0  # Number of org learnings injected into generation
+    supervision: Optional[dict] = None  # Supervision pass result
 
 
 @router.post("/generate", response_model=GenerateResponse, status_code=status.HTTP_201_CREATED)
@@ -78,6 +89,20 @@ async def generate_adr(
             generated.conflicts = conflicts
             generated.conflict_warning = conflict_warning
 
+        # 5b. Supervision pass — check against org learnings
+        learnings = get_top_learnings(limit=10)
+        learnings_used = len(learnings)
+        supervision_result = None
+        if learnings:
+            generated_dict = generated.model_dump()
+            supervision_result = await supervise(generated_dict, learnings, generator)
+            if not supervision_result["passed"]:
+                # Auto-fix: regenerate with supervision feedback
+                sup_feedback = "Supervision found issues: " + "; ".join(supervision_result["suggestions"])
+                generated, provenance = await generator.generate_async(request, feedback=sup_feedback)
+                validation = validate_adr(generated, constraints=request.constraints)
+                validation.retried = True
+
         # 6. Store ALL sections in SQLite (including extended fields)
         adr = db_create(
             title=generated.title,
@@ -94,6 +119,23 @@ async def generate_adr(
             impact=generated.impact,
             reversibility=generated.reversibility,
             related_decisions=generated.related_decisions,
+        )
+
+        # 6b. Save generation snapshot for learning loop
+        generated_sections = generated.model_dump(
+            include={"title", "y_statement", "context", "decision_drivers", "decision",
+                     "alternatives_considered", "consequences", "impact", "reversibility",
+                     "related_decisions"}
+        )
+        create_snapshot(
+            adr_id=adr["id"],
+            attempt=1 if not getattr(validation, "retried", False) else 2,
+            generated_text=json.dumps(generated_sections),
+            validation_score=validation.score if hasattr(validation, "score") else None,
+            validation_issues=getattr(validation, "issues", []),
+            conflicts=conflicts,
+            rag_provenance=provenance,
+            model=generator.model,
         )
 
         # 7. Index in ChromaDB
@@ -116,6 +158,8 @@ async def generate_adr(
             profile=request.profile,
             review_required=True,
             warnings=warnings,
+            learnings_used=learnings_used,
+            supervision=supervision_result,
             message="ADR generated. Review required before accepting."
         )
 

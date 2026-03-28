@@ -22,7 +22,9 @@ from app.db.adr_store import (
     update_adr as db_update,
     delete_adr as db_delete,
     get_stats as db_stats,
+    get_latest_snapshot,
 )
+from app.services.learning_engine import compute_section_diffs, extract_learnings
 
 router = APIRouter(prefix="/adrs", tags=["ADR"])
 
@@ -158,6 +160,18 @@ async def update_adr(
     update_data = {k: v for k, v in update_data.items() if v is not None}
     if not update_data:
         return ADR(**_ensure_datetime(existing))
+
+    # If this ADR was AI-generated, capture what changed for the learning loop
+    if existing.get("ai_generated"):
+        snapshot = get_latest_snapshot(adr_id)
+        if snapshot:
+            # Merge existing fields with update to get the accepted version
+            accepted = dict(existing)
+            accepted.update(update_data)
+            diffs = compute_section_diffs(snapshot["generated_text"], accepted)
+            if diffs:
+                extract_learnings(adr_id, diffs, snapshot)
+
     adr = db_update(adr_id, **update_data)
     _index_adr_in_vector_store(adr)
     return ADR(**_ensure_datetime(adr))
