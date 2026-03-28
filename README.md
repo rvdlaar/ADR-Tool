@@ -1,6 +1,6 @@
 # ADR Tool
 
-AI-powered Architecture Decision Record generator with RAG, quality validation, conflict detection, and export to any folder.
+AI-powered Architecture Decision Record generator with RAG, quality validation, conflict detection, and export to any folder. Download, double-click, start making decisions — AI runs locally, no setup required.
 
 ## What It Does
 
@@ -17,17 +17,37 @@ Feed it your existing docs (point to a folder) and it becomes context-aware — 
 
 ## Quick Start
 
+### Option A: Download & Run (Recommended)
+
+No Docker, no terminal, no API keys needed.
+
+1. **Download** the latest release from [Releases](https://github.com/rvdlaar/ADR-Tool/releases)
+2. **Unzip** to any folder
+3. **Double-click** `ADR-Tool.exe` (Windows) or `ADR-Tool` (macOS)
+4. **Browser opens** — start creating architecture decisions
+
+Everything runs locally. A bundled language model handles generation, validation, and conflict detection — no cloud services, no API keys, no data leaving your device.
+
+> **Power users:** Want to use your own OpenRouter key, Azure OpenAI, or local Ollama? Open **Settings** and override the AI endpoint.
+
+### Option B: Docker Compose (Power Users)
+
+Full control over models and providers.
+
 ```bash
 git clone https://github.com/rvdlaar/ADR-Tool.git
 cd ADR-Tool
-
 docker compose up -d
 # Open http://localhost:8000
 ```
 
 Two services start: the ADR API (port 8000) and ChromaDB for vector search (port 8002).
 
-**First launch:** An onboarding wizard asks for your AI API key — no `.env` editing required.
+Configure your own AI provider in **Settings**, or set `AI_API_KEY` and `AI_BASE_URL` in the environment.
+
+### Option C: IT Deployment (Intune/MDM)
+
+Same bundle as Option A, wrapped in MSIX/MSI for managed devices. IT admins can pre-configure by placing a `config.json` in the `data/` folder (e.g., pointing AI at a corporate Azure OpenAI endpoint). Users open the app — no setup required.
 
 ## Using the Frontend
 
